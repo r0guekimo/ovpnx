@@ -90,7 +90,7 @@ that lab) from "no response at all" (inconclusive: still booting, or filtered).
 
 The exit status is 0 unless a check failed.
 
-Profile names can be abbreviated when unambiguous (`ovpnx connect htb machines`).
+Profile names can be abbreviated when unambiguous: a prefix (`machines`) or any unique part of the name (`eu`, `us-2`) works.
 If `default_profile` is set, the profile name can be left out.
 
 Convenience wrappers are planned as real executables (step 6). Until then the

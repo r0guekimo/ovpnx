@@ -78,6 +78,13 @@ class Find(Base):
         self.assertEqual(self.find("machines").name, "machines_eu-4")
         self.assertEqual(self.find("machines_eu-4.ovpn").name, "machines_eu-4")
 
+    def test_unique_substring(self):
+        self.assertEqual(self.find("eu").name, "machines_eu-4")
+        self.assertEqual(self.find("point-2").name, "Starting-Point-2")
+        with self.assertRaises(prof.ProfileError) as ctx:
+            self.find("point")
+        self.assertIn("ambiguous", str(ctx.exception))
+
     def test_exact_wins_over_prefix(self):
         self.assertEqual(self.find("starting-point").name, "starting-point")
 

@@ -92,7 +92,7 @@ def scan_platform(platform):
 
 
 def find_profile(platform, profiles, name=None):
-    """Pick a profile by name: exact, case-insensitive, then unique prefix."""
+    """Pick a profile by name: exact, case-insensitive, unique prefix, then unique substring."""
     available = ", ".join(p.name for p in profiles) or "none found"
     if not name:
         name = platform.default_profile
@@ -122,6 +122,13 @@ def find_profile(platform, profiles, name=None):
     if len(prefixed) > 1:
         raise ProfileError(
             "'%s' is ambiguous: %s" % (name, ", ".join(p.name for p in prefixed))
+        )
+    inside = [p for p in profiles if name.lower() in p.name.lower()]
+    if len(inside) == 1:
+        return inside[0]
+    if len(inside) > 1:
+        raise ProfileError(
+            "'%s' is ambiguous: %s" % (name, ", ".join(p.name for p in inside))
         )
     raise ProfileError(
         "no profile named '%s' for '%s'. Available: %s" % (name, platform.key, available)
