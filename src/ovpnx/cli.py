@@ -10,6 +10,7 @@ from pathlib import Path
 from . import __version__
 from . import config as cfg
 from . import netinfo
+from . import completion
 from . import shortcuts
 from . import wizard
 from .backends import select_backend
@@ -17,7 +18,7 @@ from .backends.base import BackendError, failure_hints, make_config_name, split_
 from .diagnostics import (DEFAULT_PORTS, FAIL, INFO, PASS, WARN, Probe,
                           check_target, run_diagnostics, summarize)
 from .env import detect_environment, running_in_wsl
-from .log import Console, redact, setup_logging
+from .log import Console, clean as clean_line, redact, setup_logging
 from .profiles import ProfileError, find_profile, scan_platform
 from .state import clear_state, load_state, save_state
 
@@ -253,9 +254,21 @@ def cmd_setup(args, con):
         con.plain()
     if answer.startswith("n"):
         con.info("Later, run: ovpnx install-shortcuts")
+    else:
+        code = cmd_install_shortcuts(argparse.Namespace(config=args.config, dir=None,
+                                                        remove=False), con)
+        if code:
+            return code
+    try:
+        answer = input("Enable TAB completion (bash/zsh) for these commands? [Y/n]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        answer = "n"
+        con.plain()
+    if answer.startswith("n"):
+        con.info("Later, run: ovpnx install-completion")
         return EXIT_OK
-    return cmd_install_shortcuts(argparse.Namespace(config=args.config, dir=None,
-                                                    remove=False), con)
+    return cmd_install_completion(argparse.Namespace(config=args.config, shell=None,
+                                                     remove=False, yes=True), con)
 
 
 def cmd_config(args, con):
@@ -585,6 +598,9 @@ def cmd_install_shortcuts(args, con):
     for name in skipped:
         con.warn("Skipped %s: a file with that name exists and was not created by ovpnx"
                  % (directory / name))
+    refreshed = completion.refresh_existing(completion.names_for(settings.platforms))
+    if refreshed:
+        con.ok("Updated TAB completion (%s)" % ", ".join(refreshed))
     if (created or updated) and not shortcuts.on_path(directory):
         con.warn("%s is not on your PATH." % directory)
         con.plain('      Add it with:  echo \'export PATH="%s:$PATH"\' >> ~/.bashrc' % directory)
@@ -593,6 +609,94 @@ def cmd_install_shortcuts(args, con):
         first = sorted(settings.platforms)[0]
         con.info("Try: %s-start   (and %s-stop to disconnect)" % (first, first))
     return EXIT_ERROR if skipped and not (created or updated) else EXIT_OK
+
+
+def _platform_keys_quiet(args):
+    settings = _settings_quiet(args)
+    return list(settings.platforms) if settings else []
+
+
+def cmd_install_completion(args, con):
+    shell = args.shell or completion.detect_shell()
+    if shell not in completion.SHELLS:
+        con.err_("Could not tell which shell you use (supported: bash, zsh).")
+        con.info("Pick one with: ovpnx install-completion --shell bash|zsh")
+        return EXIT_ERROR
+    script = completion.script_path(shell)
+    rc = completion.rc_path(shell)
+
+    if args.remove:
+        removed = False
+        if script.exists():
+            script.unlink()
+            con.ok("Removed %s" % script)
+            removed = True
+        if completion.rc_remove(rc):
+            con.ok("Removed the ovpnx lines from %s" % rc)
+            removed = True
+        if not removed:
+            con.info("No %s completion was installed." % shell)
+        return EXIT_OK
+
+    names = completion.names_for(_platform_keys_quiet(args))
+    try:
+        completion.write_script(shell, names)
+    except OSError as exc:
+        con.err_("Could not write %s: %s" % (script, exc.strerror or exc))
+        return EXIT_ERROR
+    con.ok("Wrote %s completion for: %s" % (shell, ", ".join(names)))
+
+    if completion.rc_has_block(rc):
+        con.ok("%s already loads it." % rc)
+    else:
+        add = args.yes
+        if not add and sys.stdin.isatty():
+            try:
+                add = input("Add a line to %s so it loads in every new terminal? [Y/n]: "
+                            % rc).strip().lower() != "n"
+            except (EOFError, KeyboardInterrupt):
+                add = False
+                con.plain()
+        if add:
+            try:
+                completion.rc_add(rc, script)
+            except OSError as exc:
+                con.err_("Could not edit %s: %s" % (rc, exc.strerror or exc))
+                return EXIT_ERROR
+            con.ok("Added it to %s (between '# >>> ovpnx completion >>>' markers)" % rc)
+        else:
+            con.info("To enable it, add this line to %s:" % rc)
+            con.plain("      . %s" % script)
+    con.info("Open a new terminal (or run: . %s), then try: %s-start <TAB>"
+             % (script, (_platform_keys_quiet(args) or ["name"])[0]))
+    return EXIT_OK
+
+
+def cmd__complete(args, con):
+    """Hidden helper used by the shell completion scripts."""
+    words = list(args.words)
+    prog = words[0] if words else "ovpnx"
+    typed = words[1:]
+    expanded = expand_shortcut(prog, typed)
+    if expanded is not None:
+        typed = expanded
+
+    def load(config):
+        try:
+            return cfg.load_config(cfg.config_path(config))
+        except cfg.ConfigError:
+            return None
+
+    def profiles(plat):
+        return [p.name for p in scan_platform(plat).profiles]
+
+    try:
+        out = completion.complete(typed, build_parser(), load, profiles)
+    except Exception:           # completion must never print errors into the prompt
+        out = []
+    for line in out:
+        print(clean_line(line))
+    return EXIT_OK
 
 
 _PRINTERS = {PASS: "ok", INFO: "info", WARN: "warn", FAIL: "err_"}
@@ -741,6 +845,18 @@ def build_parser():
     s.add_argument("--remove", action="store_true", help="remove the shortcuts instead")
     s.set_defaults(func=cmd_install_shortcuts)
 
+    s = sub.add_parser("install-completion",
+                       help="enable TAB completion for ovpnx and the shortcut commands")
+    s.add_argument("--shell", choices=list(completion.SHELLS),
+                   help="bash or zsh (default: detected from $SHELL)")
+    s.add_argument("--remove", action="store_true", help="remove the completion again")
+    s.add_argument("--yes", action="store_true", help="edit the shell rc file without asking")
+    s.set_defaults(func=cmd_install_completion)
+
+    s = sub.add_parser("_complete")    # no help text: keeps it out of --help
+    s.add_argument("words", nargs="*")
+    s.set_defaults(func=cmd__complete)
+
     return p
 
 
@@ -754,6 +870,8 @@ def main(argv=None, prog=None):
     parser = build_parser()
     args = parser.parse_args(args_in)
     con = Console()
+    if args.command == "_complete":        # runs on every TAB: stay quiet and fast
+        return args.func(args, con)
     setup_logging(cfg.state_dir(), args.verbose)
     log.debug("ovpnx %s, command=%s", __version__, args.command)
     try:

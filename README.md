@@ -4,7 +4,7 @@ A small, dependency-free CLI that makes connecting to cybersecurity lab VPNs
 (Hack The Box, TryHackMe, and others) simple and reliable on native Linux and
 WSL2.
 
-> **Status: beta (v0.6).** Everything below works with OpenVPN 3 and OpenVPN 2 and has
+> **Status: beta (v0.7).** Everything below works with OpenVPN 3 and OpenVPN 2 and has
 > been tested on Kali under WSL2 and on a native Kali VM. Feedback and bug reports welcome.
 
 ## Why
@@ -52,6 +52,27 @@ ovpnx connect <platform> # connect (see Usage)
 Run `ovpnx setup` again at any time to add platforms; your existing file and
 comments are kept. Only values you chose are written, so the file stays short.
 `ovpnx config --init` writes a commented template instead if you prefer to edit by hand.
+
+## TAB completion (bash and zsh)
+
+```bash
+ovpnx install-completion      # asks before adding one line to ~/.bashrc or ~/.zshrc
+```
+
+Open a new terminal, then:
+
+```bash
+htb-start mach<TAB>           # completes machines_eu-4, or lists the matches
+htb-start <TAB><TAB>          # lists all profiles of that platform
+ovpnx connect <TAB>           # platforms, then profiles
+ovpnx dis<TAB>                # subcommands and options
+```
+
+Profile names are read from your folder at the moment you press TAB, so new
+`.ovpn` files show up immediately. The shortcuts (`htb-start`, `htb-stop`, ...)
+complete too, and adding a platform with `ovpnx setup` or `ovpnx install-shortcuts`
+updates the completion automatically. `ovpnx setup` also offers to enable it.
+Remove it with `ovpnx install-completion --remove`.
 
 ## Usage
 
@@ -168,8 +189,22 @@ Example output:
 - One VPN at a time by default, including sessions started outside ovpnx *(done)*
 - Per-platform compression policy, never applied blindly; failures explain the fix *(done)*
 - Diagnostics: interface, IP, routes, gateway, DNS and per-target reachability *(done)*
-- `install-shortcuts` creates `htb-start` / `htb-stop` style commands *(done)*
+- `install-shortcuts` creates `<platform>-start` / `<platform>-stop` commands *(done)*
+- Guided setup (`ovpnx setup`) and TAB completion for bash and zsh *(done)*
 - Original `.ovpn` files are never modified *(enforced and tested)*
+
+## Uninstall
+
+```bash
+./uninstall.sh             # asks before deleting your config and logs
+./uninstall.sh --purge     # deletes config and logs without asking
+./uninstall.sh --keep      # keeps them without asking
+```
+
+It disconnects any VPN ovpnx started, removes the shortcuts and completion
+lines it added (only the marked block in your shell rc file), uninstalls the
+package, and optionally deletes `~/.config/ovpnx`, `~/.local/state/ovpnx` and
+`~/.local/share/ovpnx`. It never touches your `.ovpn` profile files or the source folder.
 
 ## Requirements
 
@@ -279,6 +314,7 @@ src/ovpnx/
 ├── state.py          small JSON state, always verified against reality
 ├── runner.py         run a command: live echo (login prompts) or detached (daemons)
 ├── netinfo.py        interface IP lookup via `ip`
+├── completion.py     TAB completion logic and the bash/zsh scripts
 ├── wizard.py         guided setup (ovpnx setup)
 ├── shortcuts.py      create/remove the <platform>-start/-stop launchers
 ├── diagnostics.py    ordered checks with pass/warn/fail plus a hint, target test

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.0
+- TAB completion for bash and zsh: `ovpnx install-completion` (and offered by
+  `ovpnx setup`). Completes subcommands, options, platforms and profile names
+  (read live from your folders), also for the `<platform>-start` shortcuts.
+  Adding a platform refreshes it. Only a marked block is added to your rc file.
+- `uninstall.sh` (`--purge` / `--keep`): removes shortcuts, completion and the
+  package; asks before deleting config and logs; never touches `.ovpn` files.
+
 ## 0.6.0
 - `ovpnx setup`: guided setup. Finds folders with `.ovpn` files (up to 4 levels
   deep, also Windows folders on WSL2), you choose which are platforms, their

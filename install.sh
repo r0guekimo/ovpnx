@@ -38,6 +38,7 @@ echo
 ovpnx env || true
 echo
 echo "[*] Next steps:"
-echo "      ovpnx config --init          create the config, then edit profile_dir"
+echo "      ovpnx setup                  guided setup: finds your .ovpn files, creates the config"
 echo "      ovpnx list                   check your profiles are found"
-echo "      ovpnx install-shortcuts      create htb-start / htb-stop style commands"
+echo "      ovpnx install-shortcuts      create <name>-start / <name>-stop commands"
+echo "      ovpnx install-completion     TAB completion for bash/zsh"
