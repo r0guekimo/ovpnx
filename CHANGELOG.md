@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0
+- `ovpnx default`: change a platform's default profile from a prompt screen (platform,
+  then a numbered profile list with the current default marked; `0` clears it), or in
+  one line: `ovpnx default <platform> <profile>` / `--clear`. Edits only that line of
+  the config, keeping comments, and refuses to write an invalid result. TAB completes it.
+
 ## 0.7.0
 - TAB completion for bash and zsh: enabled automatically by `install.sh`,
   `ovpnx setup` and `ovpnx install-shortcuts` (no prompt; `ovpnx install-completion`

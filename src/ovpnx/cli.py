@@ -263,6 +263,75 @@ def cmd_setup(args, con):
     return EXIT_OK
 
 
+def _interactive():
+    return sys.stdin.isatty()
+
+
+def cmd_default(args, con):
+    settings = _load(args, con)
+    if settings is None:
+        return EXIT_ERROR
+    path = cfg.config_path(args.config)
+
+    if not args.platform:
+        if args.profile or args.clear:
+            con.err_("Give the platform first: ovpnx default <platform> <profile>")
+            return EXIT_USAGE
+        if not _interactive():
+            con.err_("Without arguments this asks questions, so it needs a terminal.")
+            con.info("Or give them directly: ovpnx default <platform> <profile>")
+            return EXIT_ERROR
+        result = wizard.run_default(con, path, settings)
+        if result is None:
+            return EXIT_OK
+        key, chosen = result
+    else:
+        key = args.platform.lower()
+        if key not in settings.platforms:
+            con.err_("Unknown platform '%s'. Configured: %s"
+                     % (args.platform, ", ".join(settings.platforms)))
+            return EXIT_ERROR
+        plat = settings.platforms[key]
+        if args.clear:
+            chosen = None
+        elif args.profile:
+            scan = scan_platform(plat)
+            if scan.error:
+                con.err_(scan.error)
+                return EXIT_ERROR
+            try:
+                chosen = find_profile(plat, scan.profiles, args.profile).name
+            except ProfileError as exc:
+                con.err_(str(exc))
+                return EXIT_ERROR
+        else:
+            if not _interactive():
+                con.err_("Give a profile, or --clear: ovpnx default %s <profile>" % key)
+                return EXIT_ERROR
+            result = wizard.run_default(con, path, _only(settings, key))
+            if result is None:
+                return EXIT_OK
+            key, chosen = result
+        if not wizard._apply_default(con, path, key, chosen):
+            return EXIT_ERROR
+
+    if chosen:
+        con.ok("Default profile for %s is now: %s" % (key, chosen))
+        con.info("Run it with: %s-start" % key)
+    else:
+        con.ok("%s now has no default profile." % key)
+        con.info("Name the profile when you connect: %s-start <profile>" % key)
+    return EXIT_OK
+
+
+def _only(settings, key):
+    """A copy of the settings holding just one platform (to skip the platform question)."""
+    only = cfg.Settings(backend=settings.backend, allow_multiple=settings.allow_multiple,
+                        connect_timeout=settings.connect_timeout,
+                        platforms={key: settings.platforms[key]})
+    return only
+
+
 def cmd_config(args, con):
     path = cfg.config_path(args.config)
     if args.path:
@@ -839,6 +908,12 @@ def build_parser():
                    help="TCP ports to probe on the target (default: %s)"
                    % ",".join(str(p) for p in DEFAULT_PORTS))
     s.set_defaults(func=cmd_diagnose)
+
+    s = sub.add_parser("default", help="change a platform's default profile")
+    s.add_argument("platform", nargs="?", help="platform (omit to choose from a menu)")
+    s.add_argument("profile", nargs="?", help="profile name or unique part of it")
+    s.add_argument("--clear", action="store_true", help="remove the default profile")
+    s.set_defaults(func=cmd_default)
 
     s = sub.add_parser("install-shortcuts",
                        help="create <platform>-start / <platform>-stop commands")

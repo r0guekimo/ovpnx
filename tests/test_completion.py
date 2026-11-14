@@ -31,6 +31,12 @@ class Completer(unittest.TestCase):
         self.assertFalse([o for o in out if o.startswith("_")])
         self.assertEqual(self.comp("co"), ["config", "connect"])
 
+    def test_default_command_completes_like_connect(self):
+        self.assertIn("default", self.comp(""))
+        self.assertEqual(self.comp("default", ""), ["htb", "thm"])
+        self.assertEqual(self.comp("default", "htb", "mach"), ["machines_eu-4", "machines_us-2"])
+        self.assertEqual(self.comp("default", "--c"), ["--clear"])
+
     def test_platforms_then_profiles(self):
         self.assertEqual(self.comp("connect", ""), ["htb", "thm"])
         self.assertEqual(self.comp("connect", "h"), ["htb"])

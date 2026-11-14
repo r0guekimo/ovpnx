@@ -14,7 +14,8 @@ from . import shortcuts
 
 FILES = ":files"       # first output line meaning "complete file names"
 GLOBAL_OPTS = ["--config", "-v", "--verbose", "--version", "-h", "--help"]
-POSITIONALS = {"connect": ["platform", "profile"], "list": ["platform"]}
+POSITIONALS = {"connect": ["platform", "profile"], "default": ["platform", "profile"],
+               "list": ["platform"]}
 VALUE_FLAGS = {"--ports", "--dir", "--shell"}
 BEGIN = "# >>> ovpnx completion >>>"
 END = "# <<< ovpnx completion <<<"

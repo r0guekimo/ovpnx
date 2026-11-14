@@ -179,9 +179,10 @@ def _configure(con, ask, directory, taken, home):
             "default_profile": default_profile, "compression": compression}
 
 
-def run_setup(con, path, home, ask=input, wsl=False, mnt_root="/mnt"):
+def run_setup(con, path, home, ask=None, wsl=False, mnt_root="/mnt"):
     """Interactive setup. Returns the list of platform keys written, or None
     if cancelled or nothing was chosen."""
+    ask = ask or input        # looked up now, so tests can replace it
     path = Path(path)
     existing = ""
     if path.exists():
@@ -254,3 +255,88 @@ def run_setup(con, path, home, ask=input, wsl=False, mnt_root="/mnt"):
     path.write_text(text, encoding="utf-8")
     con.ok("Saved %s" % path)
     return [r["key"] for r in results]
+
+
+def _apply_default(con, path, key, value):
+    """Edit default_profile in the config file; refuse to write an invalid result."""
+    path = Path(path)
+    text = path.read_text(encoding="utf-8")
+    new = cfg.set_platform_option(text, key, "default_profile", value)
+    try:
+        cfg.parse_config(new, str(path))
+    except cfg.ConfigError as exc:
+        con.err_("Not changed: the result would be an invalid config (%s)"
+                 % "; ".join(exc.problems))
+        return False
+    cfg.write_text_atomic(path, new)
+    return True
+
+
+def _pick_platform(con, ask, settings):
+    plats = list(settings.platforms.values())
+    if len(plats) == 1:
+        return plats[0]
+    con.plain()
+    for i, plat in enumerate(plats, 1):
+        con.plain("   %d) %-10s %-14s default: %s" % (
+            i, plat.key, plat.display_name, plat.default_profile or "-"))
+    while True:
+        answer = ask("Which platform? (number or name, Enter to cancel): ").strip()
+        if not answer:
+            return None
+        if answer.isdigit() and 1 <= int(answer) <= len(plats):
+            return plats[int(answer) - 1]
+        if answer.lower() in settings.platforms:
+            return settings.platforms[answer.lower()]
+        con.warn("Not in the list.")
+
+
+def run_default(con, path, settings, ask=None):
+    """Interactive screen: choose a platform, then its default profile.
+    Returns (platform key, new default or None) or None if nothing changed."""
+    ask = ask or input
+    try:
+        plat = _pick_platform(con, ask, settings)
+        if plat is None:
+            raise Aborted()
+        scan = scan_platform(plat)
+        if scan.error:
+            con.err_(scan.error)
+            return None
+        if not scan.profiles:
+            con.warn("No .ovpn files in %s" % plat.profile_dir)
+            return None
+        current = (plat.default_profile or "").lower()
+        con.plain()
+        con.info("%s (%s): %d profile%s" % (plat.display_name, plat.key, len(scan.profiles),
+                                            "" if len(scan.profiles) == 1 else "s"))
+        for i, prof in enumerate(scan.profiles, 1):
+            marks = []
+            if prof.name.lower() == current:
+                marks.append("current default")
+            if prof.auth == "prompt":
+                marks.append("asks for login")
+            con.plain("   %d) %s%s" % (i, prof.name, "   (%s)" % ", ".join(marks) if marks else ""))
+        con.plain("   0) no default (name the profile every time)")
+        while True:
+            answer = ask("Default profile (number or name, Enter = keep): ").strip()
+            if not answer:
+                raise Aborted()
+            if answer == "0":
+                chosen = None
+                break
+            if answer.isdigit() and 1 <= int(answer) <= len(scan.profiles):
+                chosen = scan.profiles[int(answer) - 1].name
+                break
+            match = [p.name for p in scan.profiles if p.name.lower() == answer.lower()]
+            if match:
+                chosen = match[0]
+                break
+            con.warn("Not in the list.")
+    except (Aborted, EOFError, KeyboardInterrupt):
+        con.plain()
+        con.info("Nothing changed.")
+        return None
+    if not _apply_default(con, path, plat.key, chosen):
+        return None
+    return plat.key, chosen

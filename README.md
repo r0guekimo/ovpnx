@@ -8,7 +8,7 @@ A small, dependency-free CLI that makes connecting to cybersecurity lab VPNs
 (Hack The Box, TryHackMe, and others) simple and reliable on native Linux and
 WSL2.
 
-> **Status: beta (v0.7).** Everything below works with OpenVPN 3 and OpenVPN 2 and has
+> **Status: beta (v0.8).** Everything below works with OpenVPN 3 and OpenVPN 2 and has
 > been tested on Kali under WSL2 and on a native Kali VM. Feedback and bug reports welcome.
 
 ## Why
@@ -52,6 +52,11 @@ ovpnx connect <platform> # connect (see Usage)
    `<name>-stop`), a display name, an optional default profile and the
    compression policy. Every question has a suggested answer; press Enter to accept it.
 4. It shows a summary, asks before writing, and offers to create the shortcuts.
+
+To change which profile `htb-start` uses, run `ovpnx default`: pick a platform, then a
+profile from a numbered list (the current default is marked, `0` removes it). Or do it in
+one line: `ovpnx default htb us` (any unique part of the name works) or `ovpnx default htb --clear`.
+Only that one line of the config file changes; your comments and other settings stay as they are.
 
 Run `ovpnx setup` again at any time to add platforms; your existing file and
 comments are kept. Only values you chose are written, so the file stays short.

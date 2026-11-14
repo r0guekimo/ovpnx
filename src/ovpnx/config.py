@@ -263,3 +263,51 @@ def write_default_config(path, force=False):
     with open(str(path), "w" if force else "x", encoding="utf-8") as fh:
         fh.write(DEFAULT_CONFIG)
     return path
+
+
+def set_platform_option(text, key, option, value):
+    """Return `text` with one option of [platform:KEY] set, changing nothing else.
+
+    value=None removes the option. The section must exist (KeyError otherwise).
+    Comments, other sections and the order of lines are kept as they are.
+    """
+    lines = text.split("\n")
+    header = re.compile(r"^\s*\[\s*platform:\s*%s\s*\]\s*$" % re.escape(key), re.I)
+    any_header = re.compile(r"^\s*\[")
+    opt_line = re.compile(r"^\s*%s\s*=" % re.escape(option), re.I)
+    any_opt = re.compile(r"^\s*[A-Za-z_][A-Za-z0-9_]*\s*=")
+
+    start = next((i for i, ln in enumerate(lines) if header.match(ln)), None)
+    if start is None:
+        raise KeyError(key)
+    end = next((i for i in range(start + 1, len(lines)) if any_header.match(lines[i])),
+               len(lines))
+
+    existing = [i for i in range(start + 1, end) if opt_line.match(lines[i])]
+    new_line = "%s = %s" % (option, value) if value is not None else None
+    if existing:
+        if new_line is None:
+            for i in reversed(existing):
+                del lines[i]
+        else:
+            lines[existing[0]] = new_line
+            for i in reversed(existing[1:]):
+                del lines[i]
+    elif new_line is not None:
+        last = start
+        for i in range(start + 1, end):
+            if any_opt.match(lines[i]):
+                last = i
+        lines.insert(last + 1, new_line)
+    return "\n".join(lines)
+
+
+def write_text_atomic(path, text):
+    """Replace a file's contents without ever leaving it half-written."""
+    path = Path(path)
+    tmp = path.with_name(path.name + ".tmp")
+    mode = path.stat().st_mode & 0o777 if path.exists() else 0o644
+    with open(str(tmp), "w", encoding="utf-8") as fh:
+        fh.write(text)
+    os.chmod(str(tmp), mode)
+    os.replace(str(tmp), str(path))
