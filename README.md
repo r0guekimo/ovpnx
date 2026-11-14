@@ -1,5 +1,9 @@
 # ovpnx
 
+[![tests](https://github.com/r0guekimo/ovpnx/actions/workflows/tests.yml/badge.svg)](https://github.com/r0guekimo/ovpnx/actions/workflows/tests.yml)
+![python](https://img.shields.io/badge/python-3.8%2B-blue)
+![license](https://img.shields.io/badge/license-MIT-green)
+
 A small, dependency-free CLI that makes connecting to cybersecurity lab VPNs
 (Hack The Box, TryHackMe, and others) simple and reliable on native Linux and
 WSL2.
@@ -20,7 +24,7 @@ It is **not** a general-purpose VPN client.
 ## Quick start
 
 ```bash
-git clone https://github.com/<you>/ovpnx.git && cd ovpnx
+git clone https://github.com/r0guekimo/ovpnx.git && cd ovpnx
 
 # run without installing
 PYTHONPATH=src python3 -m ovpnx env
@@ -220,7 +224,7 @@ sudo apt install pipx openvpn iproute2 && pipx ensurepath
 # Fedora:  sudo dnf install pipx openvpn iproute
 # Arch:    sudo pacman -S python-pipx openvpn iproute2
 
-git clone https://github.com/<you>/ovpnx.git && cd ovpnx
+git clone https://github.com/r0guekimo/ovpnx.git && cd ovpnx
 ./install.sh
 ```
 
@@ -354,6 +358,21 @@ PYTHONPATH=src python3 -m unittest discover -s tests -t .
 6. ~~Shortcuts (`install-shortcuts`), install script, troubleshooting docs~~
 7. ~~Guided setup~~, live testing on native Linux ~~(done)~~
 8. WSL2 mirrored mode, THM profiles, v1.0.0
+
+## Reporting bugs
+
+Open an [issue](https://github.com/r0guekimo/ovpnx/issues) and include:
+
+1. the output of `ovpnx env`
+2. the command you ran, with `-v` added (for example `ovpnx -v connect htb`)
+3. what you expected and what happened
+
+ovpnx redacts keys and tokens from its output and log, but **never paste the contents
+of a `.ovpn` file, a password, or a certificate or key** into an issue. Profile
+file names are fine.
+
+Ideas and pull requests are welcome. Run the tests first:
+`PYTHONPATH=src python3 -m unittest discover -s tests -t .`
 
 ## License
 
