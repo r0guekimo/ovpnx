@@ -34,6 +34,8 @@ _KV_RE = re.compile(
     r"\b(password|passwd|token|secret|api[_-]?key|private[_-]?key)(\s*[=:]\s*)(\S+)",
     re.IGNORECASE,
 )
+# auth-token pushed by the server (appears in PUSH_REPLY lines of OpenVPN logs)
+_AUTH_TOKEN_RE = re.compile(r"(auth-token(?:-user)?[ =:]\s*)[^,'\"\s]+", re.IGNORECASE)
 # very long base64-looking runs (keys, tokens). 64+ chars avoids normal words.
 _B64_RE = re.compile(r"[A-Za-z0-9+/]{64,}={0,2}")
 
@@ -45,6 +47,7 @@ def redact(text):
     text = _OPEN_BLOCK_RE.sub(REDACTED, text)
     text = _PEM_RE.sub(REDACTED, text)
     text = _KV_RE.sub(lambda m: m.group(1) + m.group(2) + REDACTED, text)
+    text = _AUTH_TOKEN_RE.sub(lambda m: m.group(1) + REDACTED, text)
     text = _B64_RE.sub(REDACTED, text)
     return text
 

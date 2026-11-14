@@ -1,0 +1,4 @@
+2026-11-14 04:00:30 net_route_v6_del: dead:beef::/64 via :: dev tun0 table 0 metric -1
+2026-11-14 04:00:30 Closing tun/tap interface
+2026-11-14 04:00:30 net_addr_v4_del: 10.10.16.153 dev tun0
+2026-11-14 04:00:30 SIGTERM[hard,] received, process exiting

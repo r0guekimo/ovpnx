@@ -24,6 +24,7 @@ class Session:
     pid: Optional[int] = None
     owner: str = ""
     created: str = ""
+    backend: str = ""        # "openvpn3" or "openvpn2" (set by the backend)
 
     @property
     def connected(self):

@@ -9,6 +9,7 @@ import os
 import select
 import subprocess
 import sys
+import tempfile
 import time
 
 from .log import clean_multiline
@@ -71,3 +72,25 @@ def run_streaming(cmd, echo=False, timeout=None, out=None):
         proc.wait()
         return TIMED_OUT, "".join(chunks)
     return proc.wait(), "".join(chunks)
+
+
+def run_detached(cmd, timeout=30):
+    """Run a command that may fork into the background (e.g. openvpn --daemon).
+
+    Output goes to a temporary file rather than a pipe, so a daemonized child
+    can never keep us waiting. Returns (returncode, output); returncode is 124
+    on timeout, and None is returned if the command cannot be started.
+    """
+    try:
+        with tempfile.TemporaryFile() as sink:
+            try:
+                proc = subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=sink,
+                                      stderr=subprocess.STDOUT, timeout=timeout)
+                rc = proc.returncode
+            except subprocess.TimeoutExpired:
+                rc = TIMED_OUT
+            sink.seek(0)
+            out = sink.read().decode("utf-8", "replace")
+    except OSError:
+        return None
+    return rc, out

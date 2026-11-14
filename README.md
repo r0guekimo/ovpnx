@@ -4,10 +4,10 @@ A small, dependency-free CLI that makes connecting to cybersecurity lab VPNs
 (Hack The Box, TryHackMe, and others) simple and reliable on native Linux and
 WSL2.
 
-> **Status: early development (roadmap steps 1-4 done).**
-> Working now (OpenVPN 3): `env`, `config`, `list`, `connect`, `disconnect`,
-> `status`, `clean`, `diagnose`. Coming next: the OpenVPN 2 backend and
-> `install-shortcuts`.
+> **Status: early development (roadmap steps 1-5 done).**
+> Working now with OpenVPN 3 and OpenVPN 2: `env`, `config`, `list`, `connect`,
+> `disconnect`, `status`, `clean`, `diagnose`. Coming next: `install-shortcuts`,
+> an install script, and more platform testing.
 
 ## Why
 
@@ -88,10 +88,32 @@ htb-start machines_eu-4       # = ovpnx connect htb machines_eu-4
 htb-stop                      # = ovpnx disconnect
 ```
 
-How it works with OpenVPN 3: the `.ovpn` file is imported read-only under the
-name `ovpnx-<platform>-<profile>` (tagged `ovpnx`), the platform's compression
+### Backends
+
+`backend = auto` (the default) uses OpenVPN 3 when it is installed and its
+services respond, and otherwise OpenVPN 2. Force one with `backend = openvpn3`
+or `backend = openvpn2`. `ovpnx env` shows which one would be used.
+
+**OpenVPN 3:** the `.ovpn` file is imported read-only under the name
+`ovpnx-<platform>-<profile>` (tagged `ovpnx`), the platform's compression
 policy is applied to the imported copy, a session is started, and the import
 is removed again on disconnect. Configs you imported yourself are never touched.
+No root needed.
+
+**OpenVPN 2:** needs root to create the tunnel, so ovpnx uses `sudo` for exactly
+two things, starting `openvpn` and stopping it, and never runs as root itself
+(it asks for your sudo password once if needed). The daemon is started as
+`openvpn --daemon ovpnx-<platform>-<profile>` with its log in
+`~/.local/state/ovpnx/openvpn2/` (private, owned by you); progress is read from
+that log, which is deleted on disconnect because it can contain session tokens.
+`--allow-compression` is only passed on OpenVPN 2.5 and newer.
+Limitation: profiles that prompt for a username and password are refused on this
+backend (use OpenVPN 3, or reference a private credentials file from a copy of
+the profile).
+
+**One VPN at a time:** ovpnx sees tunnels from both backends, including any
+`openvpn` process you started by hand or via systemd, and refuses a second
+connection unless `allow_multiple = true`.
 
 Example output:
 
@@ -114,17 +136,17 @@ Example output:
 - Multiple profiles per platform, selected by name or unique prefix *(done)*
 - Platforms defined in config, so adding one needs no code changes *(done)*
 - Environment detection: native Linux, VM, WSL1/WSL2, systemd *(done)*
-- OpenVPN 3 backend: connect, disconnect, status, clean *(done)*
+- OpenVPN 3 and OpenVPN 2 backends: connect, disconnect, status, clean *(done)*
 - One VPN at a time by default, including sessions started outside ovpnx *(done)*
 - Per-platform compression policy, never applied blindly; failures explain the fix *(done)*
 - Diagnostics: interface, IP, routes, gateway, DNS and per-target reachability *(done)*
-- OpenVPN 2 backend *(planned, step 5)*
 - Original `.ovpn` files are never modified *(enforced and tested)*
 
 ## Requirements
 
 - Python 3.8+ (standard library only)
-- OpenVPN 3 (`openvpn3`) and/or OpenVPN 2 (`openvpn`)
+- OpenVPN 3 (`openvpn3`) and/or OpenVPN 2 (`openvpn`, 2.4 or newer)
+- `sudo` (or run as root) if you use OpenVPN 2
 - `iproute2` (`ip` command)
 
 ## Configuration
@@ -173,14 +195,14 @@ src/ovpnx/
 ├── profiles.py       discover .ovpn files, select by name, never modify
 ├── log.py            console output, secret redaction, private log file
 ├── state.py          small JSON state, always verified against reality
-├── runner.py         run a command, optionally echoing output live (login prompts)
+├── runner.py         run a command: live echo (login prompts) or detached (daemons)
 ├── netinfo.py        interface IP lookup via `ip`
 ├── diagnostics.py    ordered checks with pass/warn/fail plus a hint, target test
 └── backends/
     ├── __init__.py   backend selection (auto / openvpn3 / openvpn2)
     ├── base.py       Session type, naming, failure hints
     ├── openvpn3.py   OpenVPN 3 backend and output parsers
-    └── openvpn2.py   (step 5)
+    └── openvpn2.py   OpenVPN 2 backend: daemon, log parsing, /proc discovery
 tests/                unittest, standard library only
 ```
 
@@ -209,7 +231,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -t .
 2. ~~OpenVPN 3 backend (connect, disconnect, status, clean) and state tracking~~
 3. ~~Compression policy and failure hints~~ (verified with a real HTB connection)
 4. ~~Diagnostics~~
-5. OpenVPN 2 backend
+5. ~~OpenVPN 2 backend~~
 6. Shortcuts (`install-shortcuts`), install script, docs, testing on WSL2 and native Linux
 
 ## License

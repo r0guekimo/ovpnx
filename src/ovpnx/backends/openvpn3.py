@@ -99,7 +99,10 @@ class OpenVPN3Backend:
         rc, out = self._call(["sessions-list"])
         if rc != 0:
             raise BackendError("'openvpn3 sessions-list' failed", output=out)
-        return parse_sessions(out)
+        sessions = parse_sessions(out)
+        for session in sessions:
+            session.backend = self.key
+        return sessions
 
     def wait_connected(self, session_path, timeout=10):
         waited, last = 0, None
@@ -152,7 +155,7 @@ class OpenVPN3Backend:
             raise BackendError("'openvpn3 configs-list' failed", output=out)
         return [n for n in parse_config_names(out) if n.startswith("ovpnx-")]
 
-    def prepare_config(self, profile_file, name, compression):
+    def prepare_config(self, profile_file, name, compression, auth=None):
         """Import the profile under `name` (replacing our own older copy).
 
         Returns the configuration path used for all later calls.
@@ -174,6 +177,11 @@ class OpenVPN3Backend:
                 self._best_effort_remove(path)
                 raise BackendError("could not set the compression policy", output=out)
         return path
+
+    def cleanup_session(self, session):
+        """Remove the imported config behind a finished session (ours only)."""
+        if session.managed:
+            self.remove_config(name=session.config_name)
 
     def _best_effort_remove(self, path):
         try:

@@ -107,8 +107,10 @@ class Commands(unittest.TestCase):
         code, out, _ = self.run_("config", "--path")
         self.assertEqual(out.strip(), str(self.conf))
 
-    def test_env_runs(self):
-        code, out, err = run_cli(["env"], str(self.tmp / "state"))
+    def test_env_runs_without_touching_real_backends(self):
+        from ovpnx.backends.base import BackendError
+        with mock.patch("ovpnx.cli.select_backend", side_effect=BackendError("stub")):
+            code, out, err = run_cli(["env"], str(self.tmp / "state"))
         self.assertIn(code, (0, 1))
         self.assertIn("System:", out)
         self.assertIn("Python:", out)

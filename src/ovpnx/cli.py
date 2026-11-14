@@ -98,7 +98,7 @@ def _report(con, exc, extra_hints=()):
 def _get_backend(preference, con):
     env = detect_environment()
     try:
-        return select_backend(preference, env), env
+        return select_backend(preference, env, cfg.state_dir()), env
     except BackendError as exc:
         _report(con, exc)
         return None, env
@@ -119,6 +119,16 @@ def _identify(session, settings, state):
         if split:
             return split
     return None, session.config_name
+
+
+_LABELS = {"openvpn3": "OpenVPN 3", "openvpn2": "OpenVPN 2"}
+
+
+def _session_backend_label(session, backend, env):
+    key = session.backend or backend.key
+    info = env.backends.get(key)
+    version = " %s" % info.version if info and info.version else ""
+    return "%s%s" % (_LABELS.get(key, key), version)
 
 
 def _describe(session, settings, state):
@@ -208,6 +218,16 @@ def cmd_env(args, con):
     if not env.backends:
         con.err_("No OpenVPN found. Install one, e.g.: sudo apt install openvpn")
         problems += 1
+    else:
+        settings = _settings_quiet(args)
+        preference = settings.backend if settings else "auto"
+        try:
+            chosen = select_backend(preference, env, cfg.state_dir())
+            con.ok("Backend ovpnx will use (backend = %s): %s" % (preference, chosen.label))
+        except BackendError as exc:
+            con.warn("No usable backend (backend = %s): %s" % (preference, exc))
+            for hint in exc.hints:
+                con.plain("      - %s" % hint)
     return EXIT_ERROR if problems else EXIT_OK
 
 
@@ -354,7 +374,8 @@ def cmd_connect(args, con):
 
     con.info("Importing profile...")
     try:
-        config_path = backend.prepare_config(profile.path, name, plat.compression)
+        config_path = backend.prepare_config(profile.path, name, plat.compression,
+                                             profile.auth)
     except BackendError as exc:
         _report(con, exc)
         return EXIT_ERROR
@@ -432,10 +453,9 @@ def cmd_disconnect(args, con):
         con.ok("Disconnected: %s" % label)
         if session.managed:
             try:
-                backend.remove_config(name=session.config_name)
+                backend.cleanup_session(session)
             except BackendError as exc:
-                con.warn("Could not remove imported config %s: %s"
-                         % (session.config_name, exc))
+                con.warn("Could not clean up %s: %s" % (session.config_name, exc))
     if not failed:
         clear_state(cfg.state_dir())
     return EXIT_ERROR if failed else EXIT_OK
@@ -469,7 +489,7 @@ def cmd_status(args, con):
         elif not session.managed:
             con.warn("This session was not started by ovpnx.")
         con.ok("Profile: %s" % prof)
-        con.ok("OpenVPN backend: %s%s" % (backend.label, _backend_version(backend, env)))
+        con.ok("OpenVPN backend: %s" % _session_backend_label(session, backend, env))
         (con.ok if session.connected else con.warn)("Status: %s" % (session.status or "unknown"))
         con.ok("Interface: %s" % (session.device or "unknown"))
         ip = netinfo.interface_ipv4(session.device)

@@ -33,7 +33,7 @@ class FakeBackend:
     def list_sessions(self):
         return list(self.sessions)
 
-    def prepare_config(self, path, name, compression):
+    def prepare_config(self, path, name, compression, auth=None):
         self._name = name
         self.calls.append(("prepare", str(path), name, compression))
         return CFG_PATH
@@ -54,6 +54,9 @@ class FakeBackend:
 
     def remove_config(self, name=None, path=None):
         self.calls.append(("remove", name or path))
+
+    def cleanup_session(self, session):
+        self.calls.append(("remove", session.config_name))
 
     def list_managed_configs(self):
         return list(self.configs)

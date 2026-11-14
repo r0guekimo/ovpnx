@@ -254,41 +254,66 @@ class Connection(unittest.TestCase):
 
 
 class Selection(unittest.TestCase):
-    def env(self, **backends):
+    def env(self, sudo=True, uid=1000, systemd=True, **backends):
         from ovpnx.env import Backend, Environment
-        return Environment("linux", False, None, None, "x", True, 1000, True, True, "3.12",
-                           {k: Backend(k, "/bin/" + k, "1") for k in backends})
+        return Environment("linux", False, None, None, "x", systemd, uid, sudo, True, "3.12",
+                           {k: Backend(k, "/bin/" + k, "2.7.3") for k in backends})
 
-    def test_variants(self):
+    def select(self, preference, env, service_ok=True):
+        from unittest import mock
         from ovpnx import backends as bk
+        with mock.patch.object(bk.OpenVPN3Backend, "service_ok", return_value=service_ok):
+            return bk.select_backend(preference, env, state_dir="/tmp/ovpnx-test")
+
+    def test_auto_prefers_openvpn3_and_also_watches_openvpn2(self):
+        from ovpnx import backends as bk
+        chosen = self.select("auto", self.env(openvpn3=1, openvpn2=1))
+        self.assertIsInstance(chosen, bk.MultiBackend)
+        self.assertEqual((chosen.key, chosen.extras[0].key), ("openvpn3", "openvpn2"))
+
+    def test_openvpn3_alone_is_not_wrapped(self):
+        from ovpnx import backends as bk
+        self.assertIsInstance(self.select("auto", self.env(openvpn3=1)), bk.OpenVPN3Backend)
+
+    def test_only_openvpn2_installed_uses_it(self):
+        from ovpnx import backends as bk
+        chosen = self.select("auto", self.env(openvpn2=1))
+        self.assertIsInstance(chosen, bk.OpenVPN2Backend)
+
+    def test_auto_falls_back_to_openvpn2_when_openvpn3_service_is_down(self):
+        chosen = self.select("auto", self.env(openvpn3=1, openvpn2=1), service_ok=False)
+        self.assertEqual(chosen.key, "openvpn2")
+
+    def test_forced_openvpn2_ignores_openvpn3(self):
+        chosen = self.select("openvpn2", self.env(openvpn3=1, openvpn2=1))
+        self.assertEqual(chosen.key, "openvpn2")
+
+    def test_forced_openvpn3_never_falls_back(self):
         with self.assertRaises(BackendError) as ctx:
-            bk.select_backend("openvpn2", self.env(openvpn2=1))
-        self.assertIn("step 5", str(ctx.exception))
+            self.select("openvpn3", self.env(openvpn3=1, openvpn2=1, systemd=False),
+                        service_ok=False)
+        self.assertIn("do not respond", str(ctx.exception))
+        self.assertTrue(any("systemd" in h for h in ctx.exception.hints))
         with self.assertRaises(BackendError):
-            bk.select_backend("openvpn3", self.env(openvpn2=1))
+            self.select("openvpn3", self.env(openvpn2=1))
+
+    def test_missing_installs(self):
         with self.assertRaises(BackendError) as ctx:
-            bk.select_backend("auto", self.env(openvpn2=1))
-        self.assertIn("Only OpenVPN 2", str(ctx.exception))
+            self.select("openvpn2", self.env(openvpn3=1))
+        self.assertIn("not installed", str(ctx.exception))
         with self.assertRaises(BackendError) as ctx:
-            bk.select_backend("auto", self.env())
+            self.select("auto", self.env())
         self.assertIn("No OpenVPN", str(ctx.exception))
 
-    def test_auto_picks_openvpn3_when_service_ok(self):
-        from unittest import mock
-        from ovpnx import backends as bk
-        with mock.patch.object(bk.OpenVPN3Backend, "service_ok", return_value=True):
-            self.assertEqual(bk.select_backend("auto", self.env(openvpn3=1, openvpn2=1)).key,
-                             "openvpn3")
-
-    def test_service_down_reports_hint(self):
-        from unittest import mock
-        from ovpnx import backends as bk
-        env = self.env(openvpn3=1)
-        env.systemd = False
-        with mock.patch.object(bk.OpenVPN3Backend, "service_ok", return_value=False):
-            with self.assertRaises(BackendError) as ctx:
-                bk.select_backend("auto", env)
-        self.assertTrue(any("systemd" in h for h in ctx.exception.hints))
+    def test_openvpn2_needs_root_or_sudo(self):
+        with self.assertRaises(BackendError) as ctx:
+            self.select("auto", self.env(sudo=False, openvpn2=1))
+        self.assertIn("sudo", str(ctx.exception))
+        self.assertEqual(self.select("auto", self.env(sudo=False, uid=0, openvpn2=1)).key,
+                         "openvpn2")
+        # as a secondary (view-only) backend it must not block OpenVPN 3
+        chosen = self.select("auto", self.env(sudo=False, openvpn3=1, openvpn2=1))
+        self.assertEqual(chosen.key, "openvpn3")
 
 
 if __name__ == "__main__":
