@@ -55,11 +55,12 @@ comments are kept. Only values you chose are written, so the file stays short.
 
 ## TAB completion (bash and zsh)
 
-```bash
-ovpnx install-completion      # asks before adding one line to ~/.bashrc or ~/.zshrc
-```
+It is set up automatically by `./install.sh`, `ovpnx setup` and `ovpnx install-shortcuts`:
+a small script is written to `~/.local/share/ovpnx/` and one marked block is added
+to `~/.bashrc` / `~/.zshrc` (your login shell, plus any other shell that has an rc file).
 
-Open a new terminal, then:
+A shell only reads that block when it starts, so **open a new terminal** (or run
+`exec bash` / `exec zsh` in the current one). Until then TAB just lists files.
 
 ```bash
 htb-start mach<TAB>           # completes machines_eu-4, or lists the matches
@@ -69,9 +70,7 @@ ovpnx dis<TAB>                # subcommands and options
 ```
 
 Profile names are read from your folder at the moment you press TAB, so new
-`.ovpn` files show up immediately. The shortcuts (`htb-start`, `htb-stop`, ...)
-complete too, and adding a platform with `ovpnx setup` or `ovpnx install-shortcuts`
-updates the completion automatically. `ovpnx setup` also offers to enable it.
+`.ovpn` files show up immediately. Adding a platform updates the completion.
 Remove it with `ovpnx install-completion --remove`.
 
 ## Usage

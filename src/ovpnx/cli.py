@@ -254,21 +254,13 @@ def cmd_setup(args, con):
         con.plain()
     if answer.startswith("n"):
         con.info("Later, run: ovpnx install-shortcuts")
+        _enable_completion(con, keys, quiet=True)
     else:
         code = cmd_install_shortcuts(argparse.Namespace(config=args.config, dir=None,
                                                         remove=False), con)
         if code:
             return code
-    try:
-        answer = input("Enable TAB completion (bash/zsh) for these commands? [Y/n]: ").strip().lower()
-    except (EOFError, KeyboardInterrupt):
-        answer = "n"
-        con.plain()
-    if answer.startswith("n"):
-        con.info("Later, run: ovpnx install-completion")
-        return EXIT_OK
-    return cmd_install_completion(argparse.Namespace(config=args.config, shell=None,
-                                                     remove=False, yes=True), con)
+    return EXIT_OK
 
 
 def cmd_config(args, con):
@@ -598,9 +590,8 @@ def cmd_install_shortcuts(args, con):
     for name in skipped:
         con.warn("Skipped %s: a file with that name exists and was not created by ovpnx"
                  % (directory / name))
-    refreshed = completion.refresh_existing(completion.names_for(settings.platforms))
-    if refreshed:
-        con.ok("Updated TAB completion (%s)" % ", ".join(refreshed))
+    if created or updated:
+        _enable_completion(con, list(settings.platforms), quiet=True)
     if (created or updated) and not shortcuts.on_path(directory):
         con.warn("%s is not on your PATH." % directory)
         con.plain('      Add it with:  echo \'export PATH="%s:$PATH"\' >> ~/.bashrc' % directory)
@@ -616,60 +607,70 @@ def _platform_keys_quiet(args):
     return list(settings.platforms) if settings else []
 
 
-def cmd_install_completion(args, con):
-    shell = args.shell or completion.detect_shell()
-    if shell not in completion.SHELLS:
-        con.err_("Could not tell which shell you use (supported: bash, zsh).")
-        con.info("Pick one with: ovpnx install-completion --shell bash|zsh")
-        return EXIT_ERROR
-    script = completion.script_path(shell)
-    rc = completion.rc_path(shell)
+def _completion_shells(only=None):
+    """Shells to set up: the login shell plus any other with an rc file."""
+    if only:
+        return [only]
+    shells = []
+    login = completion.detect_shell()
+    if login:
+        shells.append(login)
+    for shell in completion.SHELLS:
+        if shell not in shells and completion.rc_path(shell).exists():
+            shells.append(shell)
+    return shells
 
-    if args.remove:
-        removed = False
-        if script.exists():
-            script.unlink()
-            con.ok("Removed %s" % script)
-            removed = True
-        if completion.rc_remove(rc):
-            con.ok("Removed the ovpnx lines from %s" % rc)
-            removed = True
-        if not removed:
-            con.info("No %s completion was installed." % shell)
-        return EXIT_OK
 
-    names = completion.names_for(_platform_keys_quiet(args))
-    try:
-        completion.write_script(shell, names)
-    except OSError as exc:
-        con.err_("Could not write %s: %s" % (script, exc.strerror or exc))
-        return EXIT_ERROR
-    con.ok("Wrote %s completion for: %s" % (shell, ", ".join(names)))
-
-    if completion.rc_has_block(rc):
-        con.ok("%s already loads it." % rc)
-    else:
-        add = args.yes
-        if not add and sys.stdin.isatty():
-            try:
-                add = input("Add a line to %s so it loads in every new terminal? [Y/n]: "
-                            % rc).strip().lower() != "n"
-            except (EOFError, KeyboardInterrupt):
-                add = False
-                con.plain()
-        if add:
-            try:
+def _enable_completion(con, keys, only=None, quiet=False):
+    """Write the completion script and make the shell rc file load it. No questions."""
+    shells = _completion_shells(only)
+    if not shells:
+        if not quiet:
+            con.warn("Could not tell which shell you use, so TAB completion was not enabled.")
+            con.info("Choose one with: ovpnx install-completion --shell bash|zsh")
+        return EXIT_ERROR if not quiet else EXIT_OK
+    names = completion.names_for(keys)
+    done = []
+    for shell in shells:
+        try:
+            script = completion.write_script(shell, names)
+            rc = completion.rc_path(shell)
+            if not completion.rc_has_block(rc):
                 completion.rc_add(rc, script)
-            except OSError as exc:
-                con.err_("Could not edit %s: %s" % (rc, exc.strerror or exc))
-                return EXIT_ERROR
-            con.ok("Added it to %s (between '# >>> ovpnx completion >>>' markers)" % rc)
-        else:
-            con.info("To enable it, add this line to %s:" % rc)
-            con.plain("      . %s" % script)
-    con.info("Open a new terminal (or run: . %s), then try: %s-start <TAB>"
-             % (script, (_platform_keys_quiet(args) or ["name"])[0]))
+        except OSError as exc:
+            con.warn("TAB completion for %s failed: %s" % (shell, exc.strerror or exc))
+            continue
+        done.append(shell)
+    if not done:
+        return EXIT_ERROR
+    con.ok("TAB completion enabled for %s" % " and ".join(done))
+    login = completion.detect_shell()
+    if len(done) == 1 or login in done:
+        again = "exec %s" % (login if login in done else done[0])
+    else:
+        again = None
+    con.info("It loads in new terminals. In this terminal run: %s" % again
+             if again else "It loads in new terminals.")
     return EXIT_OK
+
+
+def cmd_install_completion(args, con):
+    if args.remove:
+        shells = [args.shell] if args.shell else list(completion.SHELLS)
+        removed = False
+        for shell in shells:
+            script = completion.script_path(shell)
+            if script.exists():
+                script.unlink()
+                con.ok("Removed %s" % script)
+                removed = True
+            if completion.rc_remove(completion.rc_path(shell)):
+                con.ok("Removed the ovpnx lines from %s" % completion.rc_path(shell))
+                removed = True
+        if not removed:
+            con.info("No TAB completion was installed.")
+        return EXIT_OK
+    return _enable_completion(con, _platform_keys_quiet(args), only=args.shell)
 
 
 def cmd__complete(args, con):
@@ -848,9 +849,8 @@ def build_parser():
     s = sub.add_parser("install-completion",
                        help="enable TAB completion for ovpnx and the shortcut commands")
     s.add_argument("--shell", choices=list(completion.SHELLS),
-                   help="bash or zsh (default: detected from $SHELL)")
+                   help="only this shell (default: your login shell and any shell with an rc file)")
     s.add_argument("--remove", action="store_true", help="remove the completion again")
-    s.add_argument("--yes", action="store_true", help="edit the shell rc file without asking")
     s.set_defaults(func=cmd_install_completion)
 
     s = sub.add_parser("_complete")    # no help text: keeps it out of --help

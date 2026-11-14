@@ -37,8 +37,9 @@ echo "[+] Installed: $(ovpnx --version)"
 echo
 ovpnx env || true
 echo
+ovpnx install-completion || true
+echo
 echo "[*] Next steps:"
 echo "      ovpnx setup                  guided setup: finds your .ovpn files, creates the config"
 echo "      ovpnx list                   check your profiles are found"
 echo "      ovpnx install-shortcuts      create <name>-start / <name>-stop commands"
-echo "      ovpnx install-completion     TAB completion for bash/zsh"

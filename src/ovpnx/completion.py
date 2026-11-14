@@ -252,13 +252,3 @@ def rc_remove(rc):
     if changed:
         rc.write_text(new)
     return changed
-
-
-def refresh_existing(names, environ=None):
-    """Regenerate completion files that already exist (after platforms change)."""
-    done = []
-    for shell in SHELLS:
-        if script_path(shell, environ).exists():
-            write_script(shell, names, environ)
-            done.append(shell)
-    return done

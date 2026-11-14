@@ -170,37 +170,44 @@ class Commands(unittest.TestCase):
     def run_cmd(self, *args):
         return run_cli(["--config", str(self.cfgfile)] + list(args), self.env["XDG_STATE_HOME"])
 
-    def test_install_and_remove(self):
-        code, out, err = self.run_cmd("install-completion", "--yes")
+    def test_install_is_automatic_and_remove_cleans(self):
+        code, out, err = self.run_cmd("install-completion")
         self.assertEqual(code, 0, out + err)
         script = Path(self.env["XDG_DATA_HOME"]) / "ovpnx" / "completion.bash"
         self.assertIn("htb-start", script.read_text())
         rc = Path(self.env["HOME"]) / ".bashrc"
         self.assertIn(completion.BEGIN, rc.read_text())
+        self.assertIn("exec bash", out)
+        code, out, _ = self.run_cmd("install-completion")      # idempotent
+        self.assertEqual(rc.read_text().count(completion.BEGIN), 1)
         code, out, _ = self.run_cmd("install-completion", "--remove")
         self.assertEqual(code, 0)
         self.assertFalse(script.exists())
         self.assertNotIn(completion.BEGIN, rc.read_text())
 
-    def test_non_interactive_does_not_touch_rc(self):
+    def test_also_sets_up_other_shell_with_rc_file(self):
+        (Path(self.env["HOME"]) / ".zshrc").write_text("# mine\n")
         code, out, _ = self.run_cmd("install-completion")
         self.assertEqual(code, 0)
-        self.assertFalse((Path(self.env["HOME"]) / ".bashrc").exists())
-        self.assertIn("add this line", out)
+        self.assertIn("bash and zsh", out)
+        self.assertTrue((Path(self.env["XDG_DATA_HOME"]) / "ovpnx" / "completion.zsh").exists())
+        self.assertIn("# mine", (Path(self.env["HOME"]) / ".zshrc").read_text())
+        self.run_cmd("install-completion", "--remove")
+        self.assertEqual((Path(self.env["HOME"]) / ".zshrc").read_text().strip(), "# mine")
 
-    def test_unknown_shell(self):
+    def test_unknown_shell_is_explained(self):
         with mock.patch.dict(os.environ, {"SHELL": "/usr/bin/fish"}):
-            code, _, err = self.run_cmd("install-completion")
+            code, out, err = self.run_cmd("install-completion")
         self.assertEqual(code, 1)
-        self.assertIn("--shell", err + _)
+        self.assertIn("--shell", out + err)
 
-    def test_install_shortcuts_refreshes_completion(self):
-        self.run_cmd("install-completion", "--yes")
+    def test_install_shortcuts_enables_completion(self):
         self.cfgfile.write_text(self.cfgfile.read_text() +
                                 "[platform:thm]\nprofile_dir = %s\n" % self.tmp.name)
         self.run_cmd("install-shortcuts", "--dir", str(Path(self.tmp.name) / "bin"))
         script = Path(self.env["XDG_DATA_HOME"]) / "ovpnx" / "completion.bash"
         self.assertIn("thm-start", script.read_text())
+        self.assertIn(completion.BEGIN, (Path(self.env["HOME"]) / ".bashrc").read_text())
 
     def test_hidden_complete_command(self):
         os.environ["OVPNX_CONFIG"] = str(self.cfgfile)

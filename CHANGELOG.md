@@ -1,8 +1,9 @@
 # Changelog
 
 ## 0.7.0
-- TAB completion for bash and zsh: `ovpnx install-completion` (and offered by
-  `ovpnx setup`). Completes subcommands, options, platforms and profile names
+- TAB completion for bash and zsh: enabled automatically by `install.sh`,
+  `ovpnx setup` and `ovpnx install-shortcuts` (no prompt; `ovpnx install-completion`
+  to run it by hand, `--remove` to undo). It loads in new terminals. Completes subcommands, options, platforms and profile names
   (read live from your folders), also for the `<platform>-start` shortcuts.
   Adding a platform refreshes it. Only a marked block is added to your rc file.
 - `uninstall.sh` (`--purge` / `--keep`): removes shortcuts, completion and the

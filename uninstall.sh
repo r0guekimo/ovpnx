@@ -31,8 +31,7 @@ if command -v ovpnx >/dev/null 2>&1; then
     ovpnx clean >/dev/null 2>&1 || true
     info "Removing shortcut commands and TAB completion..."
     ovpnx install-shortcuts --remove || true
-    ovpnx install-completion --shell bash --remove || true
-    ovpnx install-completion --shell zsh --remove || true
+    ovpnx install-completion --remove || true
 else
     warn "'ovpnx' is not on PATH, so the shortcuts and completion lines cannot be"
     warn "removed automatically. Delete ~/.local/bin/<name>-start and <name>-stop yourself,"
