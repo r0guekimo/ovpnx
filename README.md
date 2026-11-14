@@ -4,9 +4,10 @@ A small, dependency-free CLI that makes connecting to cybersecurity lab VPNs
 (Hack The Box, TryHackMe, and others) simple and reliable on native Linux and
 WSL2.
 
-> **Status: early development (roadmap step 1 done).**
-> Working now: `env`, `config`, `list`. Coming next: `connect`, `disconnect`,
-> `status`, `diagnose`.
+> **Status: early development (roadmap steps 1-2 done).**
+> Working now (OpenVPN 3): `env`, `config`, `list`, `connect`, `disconnect`,
+> `status`, `clean`. Coming next: compression error handling polish,
+> `diagnose`, the OpenVPN 2 backend, and `install-shortcuts`.
 
 ## Why
 
@@ -39,21 +40,34 @@ ovpnx list               # list profiles per platform
 ovpnx list htb --paths
 ```
 
-## Planned usage
+## Usage
 
 ```bash
-ovpnx connect htb machines_eu-4
-ovpnx status
-ovpnx diagnose
-ovpnx disconnect
-
-# convenience wrappers (real executables, not shell aliases)
-htb-start machines_eu-4
-htb-stop
-thm-start eu
+ovpnx connect htb machines_eu-4   # import (if needed), connect, report
+ovpnx status                      # exit status 0 = connected, 1 = not connected
+ovpnx disconnect                  # ends ovpnx sessions and removes their imports
+ovpnx disconnect --all            # also sessions you started some other way
+ovpnx clean                       # remove leftover imports made by ovpnx
+ovpnx diagnose                    # coming in step 4
 ```
 
-Profile names can be abbreviated when unambiguous (`htb-start machines`).
+Profile names can be abbreviated when unambiguous (`ovpnx connect htb machines`).
+If `default_profile` is set, the profile name can be left out.
+
+Convenience wrappers are planned as real executables (step 6). Until then the
+same thing works by symlinking `ovpnx` under another name:
+
+```bash
+ln -s "$(command -v ovpnx)" ~/.local/bin/htb-start
+ln -s "$(command -v ovpnx)" ~/.local/bin/htb-stop
+htb-start machines_eu-4       # = ovpnx connect htb machines_eu-4
+htb-stop                      # = ovpnx disconnect
+```
+
+How it works with OpenVPN 3: the `.ovpn` file is imported read-only under the
+name `ovpnx-<platform>-<profile>` (tagged `ovpnx`), the platform's compression
+policy is applied to the imported copy, a session is started, and the import
+is removed again on disconnect. Configs you imported yourself are never touched.
 
 Example output:
 
@@ -73,12 +87,14 @@ Example output:
 
 ## Features
 
-- Multiple profiles per platform, selected by name *(list: done)*
+- Multiple profiles per platform, selected by name or unique prefix *(done)*
 - Platforms defined in config, so adding one needs no code changes *(done)*
 - Environment detection: native Linux, VM, WSL1/WSL2, systemd *(done)*
-- OpenVPN 3 and OpenVPN 2 backends, auto-detected *(detection done)*
-- Per-platform compression policy, never applied blindly *(planned)*
-- Post-connect diagnostics: session, interface, IP, routes, gateway, DNS *(planned)*
+- OpenVPN 3 backend: connect, disconnect, status, clean *(done)*
+- One VPN at a time by default, including sessions started outside ovpnx *(done)*
+- Per-platform compression policy, never applied blindly; failures explain the fix *(done)*
+- OpenVPN 2 backend *(planned, step 5)*
+- Post-connect diagnostics: routes, gateway, DNS *(planned, step 4)*
 - Original `.ovpn` files are never modified *(enforced and tested)*
 
 ## Requirements
@@ -95,6 +111,7 @@ Example output:
 [general]
 backend = auto            ; auto | openvpn3 | openvpn2
 allow_multiple = false
+connect_timeout = 60      ; seconds, 5-600
 
 [platform:htb]
 display_name = Hack The Box
@@ -127,11 +144,14 @@ src/ovpnx/
 ├── env.py            native / WSL, systemd, privileges, installed backends
 ├── profiles.py       discover .ovpn files, select by name, never modify
 ├── log.py            console output, secret redaction, private log file
-├── state.py          (step 2) small JSON state, always verified against reality
+├── state.py          small JSON state, always verified against reality
+├── runner.py         run a command, optionally echoing output live (login prompts)
+├── netinfo.py        interface IP lookup via `ip`
 ├── diagnostics.py    (step 4) ordered checks with pass/warn/fail plus a hint
 └── backends/
-    ├── base.py       (step 2) connect / disconnect / status / list_sessions
-    ├── openvpn3.py   (step 2)
+    ├── __init__.py   backend selection (auto / openvpn3 / openvpn2)
+    ├── base.py       Session type, naming, failure hints
+    ├── openvpn3.py   OpenVPN 3 backend and output parsers
     └── openvpn2.py   (step 5)
 tests/                unittest, standard library only
 ```
@@ -158,8 +178,8 @@ PYTHONPATH=src python3 -m unittest discover -s tests -t .
 ## Roadmap
 
 1. ~~Environment detection, config, profile listing~~
-2. OpenVPN 3 backend (connect, disconnect, status) and state tracking
-3. Compression policy and error detection
+2. ~~OpenVPN 3 backend (connect, disconnect, status, clean) and state tracking~~
+3. Compression policy: polish after real-world testing
 4. Diagnostics
 5. OpenVPN 2 backend
 6. Shortcuts (`install-shortcuts`), install script, docs, testing on WSL2 and native Linux

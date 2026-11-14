@@ -79,6 +79,15 @@ class Parsing(unittest.TestCase):
         self.assertIn("allow_multiple", self._problems(
             "[general]\nallow_multiple=maybe\n[platform:a]\nprofile_dir=/x\n"))
 
+    def test_connect_timeout(self):
+        base = "[platform:a]\nprofile_dir=/x\n"
+        self.assertEqual(cfg.parse_config(base).connect_timeout, 60)
+        self.assertEqual(cfg.parse_config("[general]\nconnect_timeout = 120\n" + base)
+                         .connect_timeout, 120)
+        for bad in ("abc", "2", "9999"):
+            self.assertIn("connect_timeout", self._problems(
+                "[general]\nconnect_timeout = %s\n" % bad + base))
+
     def test_duplicate_platform_after_lowercasing(self):
         out = self._problems("[platform:HTB]\nprofile_dir=/x\n[platform:htb]\nprofile_dir=/y\n")
         self.assertIn("defined twice", out)

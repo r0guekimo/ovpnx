@@ -11,7 +11,7 @@ BACKENDS = ("auto", "openvpn3", "openvpn2")
 COMPRESSION = ("none", "asym", "yes")
 
 _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
-_GENERAL_KEYS = {"backend", "allow_multiple"}
+_GENERAL_KEYS = {"backend", "allow_multiple", "connect_timeout"}
 _PLATFORM_KEYS = {"display_name", "profile_dir", "compression", "default_profile"}
 
 DEFAULT_CONFIG = """\
@@ -23,6 +23,8 @@ DEFAULT_CONFIG = """\
 backend = auto
 ; allow_multiple: false refuses to start a second VPN while one is active.
 allow_multiple = false
+; connect_timeout: seconds to wait for a connection (5-600).
+connect_timeout = 60
 
 ; One [platform:NAME] section per lab platform. NAME becomes the command
 ; prefix (htb -> htb-start / htb-stop). Add more sections for other platforms.
@@ -70,6 +72,7 @@ class Platform:
 class Settings:
     backend: str = "auto"
     allow_multiple: bool = False
+    connect_timeout: int = 60
     platforms: Dict[str, Platform] = field(default_factory=dict)
     warnings: List[str] = field(default_factory=list)
 
@@ -122,7 +125,7 @@ def parse_config(text, source="<config>"):
         raise ConfigError([" ".join(str(exc).split())])
 
     problems, warnings = [], []
-    backend, allow_multiple = "auto", False
+    backend, allow_multiple, connect_timeout = "auto", False, 60
 
     if parser.has_section("general"):
         general = parser["general"]
@@ -138,6 +141,13 @@ def parse_config(text, source="<config>"):
             allow_multiple = general.getboolean("allow_multiple", fallback=False)
         except ValueError:
             problems.append("[general] allow_multiple must be true or false")
+        raw_timeout = _unquote(general.get("connect_timeout", "60"))
+        try:
+            connect_timeout = int(raw_timeout)
+            if not 5 <= connect_timeout <= 600:
+                raise ValueError
+        except ValueError:
+            problems.append("[general] connect_timeout must be a number from 5 to 600")
 
     platforms = {}
     for section in parser.sections():
@@ -197,7 +207,9 @@ def parse_config(text, source="<config>"):
         problems.append("no platforms configured (add a [platform:NAME] section)")
     if problems:
         raise ConfigError(problems)
-    return Settings(backend, allow_multiple, platforms, warnings)
+    return Settings(backend=backend, allow_multiple=allow_multiple,
+                    connect_timeout=connect_timeout, platforms=platforms,
+                    warnings=warnings)
 
 
 def load_config(path):

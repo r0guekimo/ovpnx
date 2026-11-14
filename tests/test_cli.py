@@ -27,6 +27,16 @@ class Shortcuts(unittest.TestCase):
         self.assertEqual(cli.expand_shortcut("htb-stop", []), ["disconnect"])
         self.assertEqual(cli.expand_shortcut("my-lab_2-start.py", []), ["connect", "my-lab_2"])
 
+    def test_global_options_stay_in_front(self):
+        self.assertEqual(cli.expand_shortcut("htb-start", ["-v", "eu"]),
+                         ["-v", "connect", "htb", "eu"])
+        self.assertEqual(cli.expand_shortcut("htb-start", ["--config", "/c.ini", "eu"]),
+                         ["--config", "/c.ini", "connect", "htb", "eu"])
+        self.assertEqual(cli.expand_shortcut("thm-start", ["--config=/c.ini", "-v"]),
+                         ["--config=/c.ini", "-v", "connect", "thm"])
+        self.assertEqual(cli.expand_shortcut("htb-stop", ["--verbose", "--all"]),
+                         ["--verbose", "disconnect", "--all"])
+
     def test_not_shortcuts(self):
         for name in ("ovpnx", "__main__.py", "start", "-start", "htb-restart"):
             self.assertIsNone(cli.expand_shortcut(name, []))
@@ -103,14 +113,10 @@ class Commands(unittest.TestCase):
         self.assertIn("System:", out)
         self.assertIn("Python:", out)
 
-    def test_connect_is_not_implemented_yet(self):
-        code, _, err = self.run_("connect", "htb")
+    def test_diagnose_is_not_implemented_yet(self):
+        code, _, err = self.run_("diagnose")
         self.assertEqual(code, cli.EXIT_TODO)
         self.assertIn("not implemented", err)
-
-    def test_shortcut_dispatch_through_main(self):
-        code, _, err = run_cli(["starting-point"], str(self.tmp / "state"), prog="htb-start")
-        self.assertEqual(code, cli.EXIT_TODO)
 
     def test_no_command_is_usage_error(self):
         code, _, err = run_cli([], str(self.tmp / "state"))

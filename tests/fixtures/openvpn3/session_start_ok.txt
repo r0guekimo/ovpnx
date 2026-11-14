@@ -1,0 +1,2 @@
+Session path: /net/openvpn/v3/sessions/ef5a10a1s40f9s41d0s800dse97707b0bde5
+Connected to 154.57.166.111 (edge-eu-free-4.hackthebox.eu)

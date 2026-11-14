@@ -54,6 +54,13 @@ def clean(text):
     return "".join(ch if ch.isprintable() else "?" for ch in str(text))
 
 
+def clean_multiline(text):
+    """Like clean(), but keeps newlines, carriage returns and tabs."""
+    return "".join(
+        ch if (ch.isprintable() or ch in "\n\r\t") else "?" for ch in str(text)
+    )
+
+
 class Console:
     """Tiny status printer: [+] ok, [*] info, [!] warning, [-] error."""
 

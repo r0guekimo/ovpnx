@@ -1,0 +1,8 @@
+-----------------------------------------------------------------------------
+        Path: /net/openvpn/v3/sessions/ef5a10a1s40f9s41d0s800dse97707b0bde5
+     Created: 2026-11-14 01:29:30                       PID: 1084
+       Owner: kimo                                   Device: tun0
+ Config name: ovpnx-probe
+Connected to: tcp:154.57.166.111:443
+      Status: Connection, Client connected
+-----------------------------------------------------------------------------
