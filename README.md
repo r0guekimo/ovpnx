@@ -28,7 +28,7 @@ git clone https://github.com/<you>/ovpnx.git && cd ovpnx
 PYTHONPATH=src python3 -m ovpnx env
 
 # or install as a command (recommended on Kali/Debian: pipx)
-pipx install --editable .
+./install.sh            # wraps `pipx install .`, no sudo needed
 ovpnx env
 ```
 
@@ -52,6 +52,21 @@ ovpnx diagnose                    # health check of the active VPN
 ovpnx diagnose 10.129.1.1         # ...plus a test of one target machine
 ovpnx diagnose 10.129.1.1 --ports 22,80,8080
 ```
+
+### Shortcuts
+
+```bash
+ovpnx install-shortcuts           # creates ~/.local/bin/<platform>-start and -stop
+htb-start eu                      # same as: ovpnx connect htb eu
+htb-stop                          # same as: ovpnx disconnect
+ovpnx install-shortcuts --remove  # delete the ones ovpnx created
+```
+
+One pair is created per platform in your config (re-run after adding a platform).
+Existing files that ovpnx did not create are never overwritten or deleted. If
+`~/.local/bin` is not on your `PATH`, the command tells you how to add it.
+Options such as `-v` or `--config FILE` go right after the command name:
+`htb-start -v eu`.
 
 ### What `diagnose` checks
 
@@ -140,6 +155,7 @@ Example output:
 - One VPN at a time by default, including sessions started outside ovpnx *(done)*
 - Per-platform compression policy, never applied blindly; failures explain the fix *(done)*
 - Diagnostics: interface, IP, routes, gateway, DNS and per-target reachability *(done)*
+- `install-shortcuts` creates `htb-start` / `htb-stop` style commands *(done)*
 - Original `.ovpn` files are never modified *(enforced and tested)*
 
 ## Requirements
@@ -148,6 +164,64 @@ Example output:
 - OpenVPN 3 (`openvpn3`) and/or OpenVPN 2 (`openvpn`, 2.4 or newer)
 - `sudo` (or run as root) if you use OpenVPN 2
 - `iproute2` (`ip` command)
+
+## Installation
+
+```bash
+# Debian / Kali / Ubuntu
+sudo apt install pipx openvpn iproute2 && pipx ensurepath
+# Fedora:  sudo dnf install pipx openvpn iproute
+# Arch:    sudo pacman -S python-pipx openvpn iproute2
+
+git clone https://github.com/<you>/ovpnx.git && cd ovpnx
+./install.sh
+```
+
+OpenVPN 3 is optional and needs no root to connect; installation steps are at
+<https://community.openvpn.net/openvpn/wiki/OpenVPN3Linux>. Without it, ovpnx
+uses OpenVPN 2 (`openvpn`) and asks for your `sudo` password when connecting.
+
+## Troubleshooting
+
+**`Compression Error: server pushed compression settings that are not allowed`**
+Hack The Box servers push compression that OpenVPN 3 rejects by default. Make
+sure the platform has `compression = asym` in the config; ovpnx then applies
+the setting to its own imported copy and never edits your `.ovpn` file.
+
+**Connected, but a machine says "Host Unreachable"**
+Run `ovpnx diagnose <machine-ip>`. If the VPN checks pass and the gateway
+reports the host unreachable, the VPN is fine: the machine is usually not
+spawned yet, or you are connected to a VPN server that cannot reach that lab.
+Spawn it, or connect with a profile for the right region or lab.
+
+**"No usable backend" or OpenVPN 3 does not answer (WSL2)**
+OpenVPN 3 needs systemd. Enable it in `/etc/wsl.conf`:
+
+```ini
+[boot]
+systemd=true
+```
+
+then run `wsl --shutdown` from Windows and reopen the distro. Alternatively
+install OpenVPN 2 and set `backend = openvpn2`.
+
+**WSL2 notes**
+- Only the Linux distribution is tunneled. Windows apps and browsers are not.
+  Use the tools (and a browser) inside the distro.
+- WSL1 has no TUN device and cannot work; upgrade to WSL2.
+- Both NAT and mirrored networking modes should work; `ovpnx env` shows which
+  one was detected.
+- If connecting fails with a TUN error, check that `/dev/net/tun` exists.
+
+**A login prompt profile with OpenVPN 2**
+Profiles with a bare `auth-user-pass` line are only supported by OpenVPN 3
+(it prompts you). With OpenVPN 2, ovpnx refuses them rather than store a password.
+
+**`htb-start: command not found`**
+Run `ovpnx install-shortcuts`, and make sure `~/.local/bin` is on your `PATH`.
+
+**Anything else:** `ovpnx -v <command>` prints debug lines, and
+`~/.local/state/ovpnx/logs/ovpnx.log` keeps a redacted log.
 
 ## Configuration
 
@@ -197,6 +271,7 @@ src/ovpnx/
 ├── state.py          small JSON state, always verified against reality
 ├── runner.py         run a command: live echo (login prompts) or detached (daemons)
 ├── netinfo.py        interface IP lookup via `ip`
+├── shortcuts.py      create/remove the <platform>-start/-stop launchers
 ├── diagnostics.py    ordered checks with pass/warn/fail plus a hint, target test
 └── backends/
     ├── __init__.py   backend selection (auto / openvpn3 / openvpn2)
@@ -232,7 +307,8 @@ PYTHONPATH=src python3 -m unittest discover -s tests -t .
 3. ~~Compression policy and failure hints~~ (verified with a real HTB connection)
 4. ~~Diagnostics~~
 5. ~~OpenVPN 2 backend~~
-6. Shortcuts (`install-shortcuts`), install script, docs, testing on WSL2 and native Linux
+6. ~~Shortcuts (`install-shortcuts`), install script, troubleshooting docs~~
+7. Live testing on native Linux and WSL2 mirrored mode; tag v1.0.0
 
 ## License
 

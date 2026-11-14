@@ -10,6 +10,7 @@ from pathlib import Path
 from . import __version__
 from . import config as cfg
 from . import netinfo
+from . import shortcuts
 from .backends import select_backend
 from .backends.base import BackendError, failure_hints, make_config_name, split_config_name
 from .diagnostics import (DEFAULT_PORTS, FAIL, INFO, PASS, WARN, Probe,
@@ -533,6 +534,45 @@ def cmd_clean(args, con):
     return EXIT_ERROR if failed else EXIT_OK
 
 
+def cmd_install_shortcuts(args, con):
+    settings = _load(args, con)
+    if settings is None:
+        return EXIT_ERROR
+    directory = Path(os.path.expanduser(args.dir)) if args.dir else shortcuts.default_dir()
+    names = shortcuts.names_for(settings.platforms)
+
+    if args.remove:
+        removed, skipped = shortcuts.remove(directory, names)
+        for name in removed:
+            con.ok("Removed %s" % (directory / name))
+        for name in skipped:
+            con.warn("Kept %s (not created by ovpnx)" % (directory / name))
+        if not removed and not skipped:
+            con.info("No shortcuts found in %s" % directory)
+        return EXIT_OK
+
+    try:
+        created, updated, skipped = shortcuts.install(directory, names)
+    except OSError as exc:
+        con.err_("Could not write to %s: %s" % (directory, exc.strerror or exc))
+        return EXIT_ERROR
+    for name in created:
+        con.ok("Created %s" % (directory / name))
+    for name in updated:
+        con.ok("Updated %s" % (directory / name))
+    for name in skipped:
+        con.warn("Skipped %s: a file with that name exists and was not created by ovpnx"
+                 % (directory / name))
+    if (created or updated) and not shortcuts.on_path(directory):
+        con.warn("%s is not on your PATH." % directory)
+        con.plain('      Add it with:  echo \'export PATH="%s:$PATH"\' >> ~/.bashrc' % directory)
+        con.plain("      then open a new terminal (zsh users: ~/.zshrc).")
+    if created or updated:
+        first = sorted(settings.platforms)[0]
+        con.info("Try: %s-start   (and %s-stop to disconnect)" % (first, first))
+    return EXIT_ERROR if skipped and not (created or updated) else EXIT_OK
+
+
 _PRINTERS = {PASS: "ok", INFO: "info", WARN: "warn", FAIL: "err_"}
 
 
@@ -666,6 +706,13 @@ def build_parser():
                    help="TCP ports to probe on the target (default: %s)"
                    % ",".join(str(p) for p in DEFAULT_PORTS))
     s.set_defaults(func=cmd_diagnose)
+
+    s = sub.add_parser("install-shortcuts",
+                       help="create <platform>-start / <platform>-stop commands")
+    s.add_argument("--dir", metavar="DIR", help="where to put them (default: ~/.local/bin)")
+    s.add_argument("--remove", action="store_true", help="remove the shortcuts instead")
+    s.set_defaults(func=cmd_install_shortcuts)
+
     return p
 
 
