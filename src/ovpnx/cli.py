@@ -11,13 +11,14 @@ from . import __version__
 from . import config as cfg
 from . import netinfo
 from . import shortcuts
+from . import wizard
 from .backends import select_backend
 from .backends.base import BackendError, failure_hints, make_config_name, split_config_name
 from .diagnostics import (DEFAULT_PORTS, FAIL, INFO, PASS, WARN, Probe,
                           check_target, run_diagnostics, summarize)
 from .env import detect_environment, running_in_wsl
 from .log import Console, redact, setup_logging
-from .profiles import ProfileError, find_candidate_dirs, find_profile, scan_platform
+from .profiles import ProfileError, find_profile, scan_platform
 from .state import clear_state, load_state, save_state
 
 EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_TODO = 0, 1, 2, 3
@@ -66,7 +67,7 @@ def _load(args, con):
         settings = cfg.load_config(path)
     except cfg.ConfigNotFound:
         con.err_("No config file at %s" % path)
-        con.info("Create one with: ovpnx config --init")
+        con.info("Create one with: ovpnx setup")
         return None
     except cfg.ConfigError as exc:
         con.err_("Invalid config: %s" % path)
@@ -232,6 +233,31 @@ def cmd_env(args, con):
     return EXIT_ERROR if problems else EXIT_OK
 
 
+def cmd_setup(args, con):
+    if not sys.stdin.isatty():
+        con.err_("'ovpnx setup' asks questions, so it needs an interactive terminal.")
+        con.info("For a template to edit by hand: ovpnx config --init")
+        return EXIT_ERROR
+    path = cfg.config_path(args.config)
+    home = os.environ.get("HOME") or str(Path.home())
+    keys = wizard.run_setup(con, path, home, wsl=running_in_wsl())
+    if not keys:
+        return EXIT_ERROR
+    con.plain()
+    con.info("Check it with: ovpnx list")
+    try:
+        answer = input("Create the shortcut commands (%s) now? [Y/n]: "
+                       % ", ".join(shortcuts.names_for(keys))).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        answer = "n"
+        con.plain()
+    if answer.startswith("n"):
+        con.info("Later, run: ovpnx install-shortcuts")
+        return EXIT_OK
+    return cmd_install_shortcuts(argparse.Namespace(config=args.config, dir=None,
+                                                    remove=False), con)
+
+
 def cmd_config(args, con):
     path = cfg.config_path(args.config)
     if args.path:
@@ -239,23 +265,19 @@ def cmd_config(args, con):
         return EXIT_OK
 
     if args.init:
+        if sys.stdin.isatty() and not path.exists() and not args.template:
+            return cmd_setup(args, con)
         try:
             cfg.write_default_config(path, force=args.force)
         except FileExistsError:
             con.err_("Config already exists: %s" % path)
-            con.info("Use --force to overwrite it.")
+            con.info("Use --force to overwrite it, or 'ovpnx setup' to add platforms.")
             return EXIT_ERROR
         except OSError as exc:
             con.err_("Could not write %s: %s" % (path, exc.strerror or exc))
             return EXIT_ERROR
-        con.ok("Created %s" % path)
-        home = os.environ.get("HOME") or str(Path.home())
-        found = find_candidate_dirs(home, wsl=running_in_wsl())
-        if found:
-            con.info("Folders that already contain .ovpn files (use as profile_dir):")
-            for directory, count in found:
-                con.plain("      %s  (%d file%s)" % (directory, count, "" if count == 1 else "s"))
-        con.info("Edit the file, then run: ovpnx list")
+        con.ok("Created %s (a template with no platforms yet)" % path)
+        con.info("Edit it, or run the guided setup instead: ovpnx setup")
         return EXIT_OK
 
     con.info("Config file: %s" % path)
@@ -676,10 +698,16 @@ def build_parser():
     s.set_defaults(func=cmd_list)
 
     s = sub.add_parser("config", help="show or create the config file")
-    s.add_argument("--init", action="store_true", help="create a default config file")
+    s.add_argument("--init", action="store_true",
+                   help="create the config (guided on a terminal, else a template)")
+    s.add_argument("--template", action="store_true",
+                   help="with --init: write the template without questions")
     s.add_argument("--force", action="store_true", help="with --init: overwrite")
     s.add_argument("--path", action="store_true", help="print the config file path")
     s.set_defaults(func=cmd_config)
+
+    s = sub.add_parser("setup", help="guided setup: find .ovpn files and choose platforms")
+    s.set_defaults(func=cmd_setup)
 
     s = sub.add_parser("env", help="show detected environment and OpenVPN backends")
     s.set_defaults(func=cmd_env)

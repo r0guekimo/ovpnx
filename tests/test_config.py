@@ -26,15 +26,31 @@ class Paths(unittest.TestCase):
 
 
 class Parsing(unittest.TestCase):
-    def test_default_template_is_valid(self):
-        s = cfg.parse_config(cfg.DEFAULT_CONFIG)
+    def test_default_template_has_no_platforms(self):
+        with self.assertRaises(cfg.ConfigError) as ctx:
+            cfg.parse_config(cfg.DEFAULT_CONFIG)
+        self.assertIn("no platforms", " ".join(ctx.exception.problems))
+        self.assertNotIn("htb", cfg.DEFAULT_CONFIG.lower())
+        self.assertNotIn("thm", cfg.DEFAULT_CONFIG.lower())
+
+    def test_template_example_works_when_uncommented(self):
+        lines = [ln[2:] if ln.startswith("; ") and not ln.startswith(";  ") else ln
+                 for ln in cfg.DEFAULT_CONFIG.splitlines()]
+        text = "\n".join(ln for ln in lines if ln.startswith("[") or " = " in ln)
+        s = cfg.parse_config(text)
+        self.assertEqual(set(s.platforms), {"mylab"})
         self.assertEqual(s.backend, "auto")
-        self.assertFalse(s.allow_multiple)
-        self.assertEqual(set(s.platforms), {"htb", "thm"})
-        self.assertEqual(s.platforms["htb"].compression, "asym")
-        self.assertEqual(s.platforms["thm"].compression, "none")
-        self.assertEqual(s.platforms["htb"].display_name, "Hack The Box")
-        self.assertEqual(s.warnings, [])
+
+    def test_render_platform_roundtrip(self):
+        text = cfg.render_platform("htb", "HTB", "/home/u/x/vpn", "eu", "asym", home="/home/u")
+        self.assertIn("profile_dir = ~/x/vpn", text)
+        s = cfg.parse_config(text)
+        p = s.platforms["htb"]
+        self.assertEqual((p.display_name, p.default_profile, p.compression),
+                         ("HTB", "eu", "asym"))
+        plain = cfg.render_platform("a", "A", "/srv/p", home="/home/u")
+        self.assertNotIn("compression", plain)
+        self.assertNotIn("default_profile", plain)
 
     def test_spaces_quotes_and_inline_comment(self):
         s = cfg.parse_config(
@@ -107,7 +123,7 @@ class Files(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "sub" / "config.ini"
             cfg.write_default_config(path)
-            self.assertEqual(set(cfg.load_config(path).platforms), {"htb", "thm"})
+            self.assertIn("ovpnx setup", path.read_text())
             with self.assertRaises(FileExistsError):
                 cfg.write_default_config(path)
             path.write_text("changed")

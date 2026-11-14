@@ -4,10 +4,8 @@ A small, dependency-free CLI that makes connecting to cybersecurity lab VPNs
 (Hack The Box, TryHackMe, and others) simple and reliable on native Linux and
 WSL2.
 
-> **Status: early development (roadmap steps 1-5 done).**
-> Working now with OpenVPN 3 and OpenVPN 2: `env`, `config`, `list`, `connect`,
-> `disconnect`, `status`, `clean`, `diagnose`. Coming next: `install-shortcuts`,
-> an install script, and more platform testing.
+> **Status: beta (v0.6).** Everything below works with OpenVPN 3 and OpenVPN 2 and has
+> been tested on Kali under WSL2 and on a native Kali VM. Feedback and bug reports welcome.
 
 ## Why
 
@@ -19,7 +17,7 @@ workflow in a few commands and explains what went wrong.
 
 It is **not** a general-purpose VPN client.
 
-## Quick start (development)
+## Quick start
 
 ```bash
 git clone https://github.com/<you>/ovpnx.git && cd ovpnx
@@ -34,16 +32,31 @@ ovpnx env
 
 ```bash
 ovpnx env                # what was detected: WSL/native, systemd, OpenVPN 2/3
-ovpnx config --init      # create ~/.config/ovpnx/config.ini
-ovpnx config             # show the loaded settings
+ovpnx setup              # guided: finds your .ovpn files, you choose the platforms
 ovpnx list               # list profiles per platform
-ovpnx list htb --paths
+ovpnx connect <platform> # connect (see Usage)
 ```
+
+## Setup
+
+`ovpnx setup` has no built-in platforms: you decide everything.
+
+1. It searches your home folder (and the Windows user folders on WSL2) for
+   folders that contain `.ovpn` files and lists them.
+2. You pick the folders that are lab platforms (or type a path yourself).
+3. For each one you choose a short name (it becomes `<name>-start` and
+   `<name>-stop`), a display name, an optional default profile and the
+   compression policy. Every question has a suggested answer; press Enter to accept it.
+4. It shows a summary, asks before writing, and offers to create the shortcuts.
+
+Run `ovpnx setup` again at any time to add platforms; your existing file and
+comments are kept. Only values you chose are written, so the file stays short.
+`ovpnx config --init` writes a commented template instead if you prefer to edit by hand.
 
 ## Usage
 
 ```bash
-ovpnx connect htb machines_eu-4   # import (if needed), connect, report
+ovpnx connect htb machines_eu-4   # connect to a profile of platform 'htb' (your names)
 ovpnx status                      # exit status 0 = connected, 1 = not connected
 ovpnx disconnect                  # ends ovpnx sessions and removes their imports
 ovpnx disconnect --all            # also sessions you started some other way
@@ -225,28 +238,23 @@ Run `ovpnx install-shortcuts`, and make sure `~/.local/bin` is on your `PATH`.
 
 ## Configuration
 
-`~/.config/ovpnx/config.ini` (create it with `ovpnx config --init`)
+`~/.config/ovpnx/config.ini` (created by `ovpnx setup`)
 
 ```ini
-[general]
+[platform:mylab]
+display_name = My Lab
+profile_dir = ~/path/to/ovpn/files
+default_profile = my-profile
+compression = none        ; none | asym | yes
+expected_routes =         ; optional, e.g. 10.129.0.0/16, 10.10.10.0/24
+
+[general]                 ; optional section, these are the defaults
 backend = auto            ; auto | openvpn3 | openvpn2
 allow_multiple = false
 connect_timeout = 60      ; seconds, 5-600
-
-[platform:htb]
-display_name = Hack The Box
-profile_dir = ~/vpn-profiles/HTB
-compression = asym        ; none | asym | yes
-default_profile = starting-point
-expected_routes =         ; optional, e.g. 10.129.0.0/16, 10.10.10.0/24
-
-[platform:thm]
-display_name = TryHackMe
-profile_dir = ~/vpn-profiles/THM
-compression = none
 ```
 
-- The part after `platform:` becomes the shortcut prefix (`htb-start`).
+- The part after `platform:` becomes the shortcut prefix (`mylab-start`).
 - `compression = none` passes nothing. `asym` accepts compressed data from the
   server but never compresses what you send. `yes` is not recommended.
 - `expected_routes` (optional) lists networks that `ovpnx diagnose` verifies are
@@ -271,6 +279,7 @@ src/ovpnx/
 ├── state.py          small JSON state, always verified against reality
 ├── runner.py         run a command: live echo (login prompts) or detached (daemons)
 ├── netinfo.py        interface IP lookup via `ip`
+├── wizard.py         guided setup (ovpnx setup)
 ├── shortcuts.py      create/remove the <platform>-start/-stop launchers
 ├── diagnostics.py    ordered checks with pass/warn/fail plus a hint, target test
 └── backends/
@@ -308,7 +317,8 @@ PYTHONPATH=src python3 -m unittest discover -s tests -t .
 4. ~~Diagnostics~~
 5. ~~OpenVPN 2 backend~~
 6. ~~Shortcuts (`install-shortcuts`), install script, troubleshooting docs~~
-7. Live testing on native Linux and WSL2 mirrored mode; tag v1.0.0
+7. ~~Guided setup~~, live testing on native Linux ~~(done)~~
+8. WSL2 mirrored mode, THM profiles, v1.0.0
 
 ## License
 

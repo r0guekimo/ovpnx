@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0
+- `ovpnx setup`: guided setup. Finds folders with `.ovpn` files (up to 4 levels
+  deep, also Windows folders on WSL2), you choose which are platforms, their
+  names, default profile and compression. Re-run to add platforms; replacing
+  keeps a `.bak`.
+- No more built-in HTB/THM platforms: the config template is neutral and the
+  generated config only contains the values you chose.
+- `config --init` starts the guided setup on a terminal, else writes a template
+  (`--template` forces the template).
+
 ## 0.5.0
 - `install-shortcuts`: creates `<platform>-start` / `<platform>-stop` launchers
   (never overwrites files it did not create; `--remove`, `--dir`).

@@ -145,12 +145,6 @@ class ConfigExpectedRoutes(unittest.TestCase):
                 cfg.parse_config("[platform:a]\nprofile_dir=/x\nexpected_routes=%s\n" % bad)
             self.assertIn("expected_routes", str(ctx.exception))
 
-    def test_default_template_still_clean(self):
-        from ovpnx import config as cfg
-        s = cfg.parse_config(cfg.DEFAULT_CONFIG)
-        self.assertEqual(s.warnings, [])
-        self.assertEqual(s.platforms["htb"].expected_routes, [])
-
 
 if __name__ == "__main__":
     unittest.main()

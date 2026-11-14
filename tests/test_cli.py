@@ -80,7 +80,7 @@ class Commands(unittest.TestCase):
         code, out, err = run_cli(["--config", str(self.tmp / "none.ini"), "list"],
                                  str(self.tmp / "state"))
         self.assertEqual(code, 1)
-        self.assertIn("ovpnx config --init", out)
+        self.assertIn("ovpnx setup", out)
 
     def test_invalid_config_lists_problems(self):
         self.conf.write_text("[general]\nbackend=nope\n[platform:a]\nprofile_dir=/x\n")
@@ -100,8 +100,8 @@ class Commands(unittest.TestCase):
         code, _, _ = run_cli(["--config", str(new), "config", "--init", "--force"], state)
         self.assertEqual(code, 0)
         code, out, _ = run_cli(["--config", str(new), "config"], state)
-        self.assertEqual(code, 0)
-        self.assertIn("platform htb (Hack The Box)", out)
+        self.assertEqual(code, 1)          # a fresh template has no platforms yet
+        self.assertIn("no platforms", out)
 
     def test_config_path(self):
         code, out, _ = self.run_("config", "--path")

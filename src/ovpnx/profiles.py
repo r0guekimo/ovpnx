@@ -200,3 +200,65 @@ def find_candidate_dirs(home, wsl=False, mnt_root="/mnt", limit=10):
                 if len(found) >= limit:
                     return found
     return found
+
+
+_SKIP_DIRS = {"node_modules", "snap", "venv", "site-packages", "__pycache__", "appdata",
+              "library", "go", "proc", "sys", "dev", "windows", "program files"}
+
+
+def find_ovpn_dirs(home, wsl=False, mnt_root="/mnt", max_depth=4, max_dirs=6000, limit=30):
+    """Search a few levels below the home folder (and the Windows user folders
+    on WSL) for directories that contain .ovpn files.
+
+    Bounded by depth and by the number of folders visited, never follows
+    symlinks, skips hidden and bulky folders. Only used to suggest folders.
+    Returns a sorted list of (Path, count).
+    """
+    roots = [Path(home)]
+    if wsl:
+        try:
+            drives = sorted(os.listdir(mnt_root))
+        except OSError:
+            drives = []
+        for drive in drives:
+            users = Path(mnt_root) / drive / "Users"
+            if len(drive) != 1 or not users.is_dir():
+                continue
+            try:
+                names = sorted(os.listdir(str(users)))
+            except OSError:
+                continue
+            for name in names:
+                if name.lower() in _SKIP_USERS:
+                    continue
+                for sub in ("Desktop", "Downloads", "Documents", "OneDrive/Desktop"):
+                    roots.append(users / name / sub)
+
+    found, seen, visited = [], set(), 0
+    queue = [(r, 0) for r in roots]
+    while queue and visited < max_dirs and len(found) < limit:
+        directory, depth = queue.pop(0)
+        if directory in seen:
+            continue
+        seen.add(directory)
+        visited += 1
+        count, children = 0, []
+        try:
+            with os.scandir(str(directory)) as it:
+                for entry in it:
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            if (depth < max_depth and not entry.name.startswith(".")
+                                    and entry.name.lower() not in _SKIP_DIRS):
+                                children.append(Path(entry.path))
+                        elif (entry.name.lower().endswith(".ovpn")
+                              and entry.is_file(follow_symlinks=False)):
+                            count += 1
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+        if count:
+            found.append((directory, count))
+        queue.extend((c, depth + 1) for c in sorted(children))
+    return sorted(found)

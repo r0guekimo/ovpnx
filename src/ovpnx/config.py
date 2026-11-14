@@ -17,41 +17,49 @@ _PLATFORM_KEYS = {"display_name", "profile_dir", "compression", "default_profile
                   "expected_routes"}
 
 DEFAULT_CONFIG = """\
-; ovpnx configuration. Lines starting with ';' or '#' are comments.
-
-[general]
-; backend: auto | openvpn3 | openvpn2
-;   auto prefers OpenVPN 3 when installed and working, else OpenVPN 2.
-backend = auto
-; allow_multiple: false refuses to start a second VPN while one is active.
-allow_multiple = false
-; connect_timeout: seconds to wait for a connection (5-600).
-connect_timeout = 60
-
-; One [platform:NAME] section per lab platform. NAME becomes the command
-; prefix (htb -> htb-start / htb-stop). Add more sections for other platforms.
-
-[platform:htb]
-display_name = Hack The Box
-; Directory holding your .ovpn files. On WSL this may be a Windows path such
-; as /mnt/c/Users/<you>/Desktop/VPN Profiles/HTB
-profile_dir = ~/vpn-profiles/HTB
-; compression: none | asym | yes
-;   none = pass nothing (OpenVPN default, safest)
-;   asym = accept compressed data from the server, never compress what you send
-;   yes  = full compression both ways (not recommended, weakens security)
-compression = asym
-; default_profile = starting-point
-; expected_routes: optional comma-separated networks that 'ovpnx diagnose'
-; verifies are routed through the VPN, e.g. 10.129.0.0/16, 10.10.10.0/24
-; expected_routes =
-
-[platform:thm]
-display_name = TryHackMe
-profile_dir = ~/vpn-profiles/THM
-compression = none
-; default_profile = eu
+; ovpnx config. For a guided setup run:  ovpnx setup
+;
+; Add one section per lab platform. NAME becomes the command prefix
+; (NAME-start / NAME-stop). Remove the leading ';' to enable the example.
+;
+; [platform:mylab]
+; display_name = My Lab
+; profile_dir = ~/path/to/folder/with/ovpn/files
+; default_profile = profile-name      ; optional
+; compression = none                  ; none | asym | yes (see README)
+;
+; Optional global settings:
+; [general]
+; backend = auto                      ; auto | openvpn3 | openvpn2
+; allow_multiple = false
+; connect_timeout = 60
 """
+
+HEADER = "; ovpnx config. Edit freely, check it with: ovpnx config\n"
+
+
+def tilde(path, home=None):
+    """Write a path with ~ when it lives under the home folder."""
+    home = home or os.path.expanduser("~")
+    path = str(path)
+    if path == home:
+        return "~"
+    if path.startswith(home.rstrip("/") + "/"):
+        return "~/" + path[len(home.rstrip("/")) + 1:]
+    return path
+
+
+def render_platform(key, display_name, profile_dir, default_profile=None,
+                    compression="none", home=None):
+    """Return the text of one [platform:KEY] section (only non-default values)."""
+    lines = ["[platform:%s]" % key,
+             "display_name = %s" % display_name,
+             "profile_dir = %s" % tilde(profile_dir, home)]
+    if default_profile:
+        lines.append("default_profile = %s" % default_profile)
+    if compression != "none":
+        lines.append("compression = %s" % compression)
+    return "\n".join(lines) + "\n"
 
 
 class ConfigError(Exception):
