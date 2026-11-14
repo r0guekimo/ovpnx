@@ -1,5 +1,6 @@
 """Config loading and validation (INI, standard library only)."""
 import configparser
+import ipaddress
 import os
 import re
 from dataclasses import dataclass, field
@@ -12,7 +13,8 @@ COMPRESSION = ("none", "asym", "yes")
 
 _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 _GENERAL_KEYS = {"backend", "allow_multiple", "connect_timeout"}
-_PLATFORM_KEYS = {"display_name", "profile_dir", "compression", "default_profile"}
+_PLATFORM_KEYS = {"display_name", "profile_dir", "compression", "default_profile",
+                  "expected_routes"}
 
 DEFAULT_CONFIG = """\
 ; ovpnx configuration. Lines starting with ';' or '#' are comments.
@@ -40,6 +42,9 @@ profile_dir = ~/vpn-profiles/HTB
 ;   yes  = full compression both ways (not recommended, weakens security)
 compression = asym
 ; default_profile = starting-point
+; expected_routes: optional comma-separated networks that 'ovpnx diagnose'
+; verifies are routed through the VPN, e.g. 10.129.0.0/16, 10.10.10.0/24
+; expected_routes =
 
 [platform:thm]
 display_name = TryHackMe
@@ -66,6 +71,7 @@ class Platform:
     profile_dir: Path
     compression: str = "none"
     default_profile: Optional[str] = None
+    expected_routes: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -195,12 +201,31 @@ def parse_config(text, source="<config>"):
         if default.lower().endswith(".ovpn"):
             default = default[:-5]
 
+        routes, bad_route = [], None
+        for item in _unquote(opts.get("expected_routes", "")).replace(";", ",").split(","):
+            item = item.strip()
+            if not item:
+                continue
+            try:
+                net = ipaddress.ip_network(item, strict=False)
+                if net.version != 4:
+                    raise ValueError
+                routes.append(str(net))
+            except ValueError:
+                bad_route = item
+                break
+        if bad_route is not None:
+            problems.append("%s: expected_routes has an invalid IPv4 network: %s"
+                            % (label, bad_route))
+            continue
+
         platforms[key] = Platform(
             key=key,
             display_name=_unquote(opts.get("display_name", "")) or key.upper(),
             profile_dir=Path(expanded),
             compression=compression,
             default_profile=default or None,
+            expected_routes=routes,
         )
 
     if not platforms and not problems:

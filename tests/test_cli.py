@@ -113,11 +113,6 @@ class Commands(unittest.TestCase):
         self.assertIn("System:", out)
         self.assertIn("Python:", out)
 
-    def test_diagnose_is_not_implemented_yet(self):
-        code, _, err = self.run_("diagnose")
-        self.assertEqual(code, cli.EXIT_TODO)
-        self.assertIn("not implemented", err)
-
     def test_no_command_is_usage_error(self):
         code, _, err = run_cli([], str(self.tmp / "state"))
         self.assertEqual(code, 2)

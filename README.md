@@ -4,10 +4,10 @@ A small, dependency-free CLI that makes connecting to cybersecurity lab VPNs
 (Hack The Box, TryHackMe, and others) simple and reliable on native Linux and
 WSL2.
 
-> **Status: early development (roadmap steps 1-2 done).**
+> **Status: early development (roadmap steps 1-4 done).**
 > Working now (OpenVPN 3): `env`, `config`, `list`, `connect`, `disconnect`,
-> `status`, `clean`. Coming next: compression error handling polish,
-> `diagnose`, the OpenVPN 2 backend, and `install-shortcuts`.
+> `status`, `clean`, `diagnose`. Coming next: the OpenVPN 2 backend and
+> `install-shortcuts`.
 
 ## Why
 
@@ -48,8 +48,32 @@ ovpnx status                      # exit status 0 = connected, 1 = not connected
 ovpnx disconnect                  # ends ovpnx sessions and removes their imports
 ovpnx disconnect --all            # also sessions you started some other way
 ovpnx clean                       # remove leftover imports made by ovpnx
-ovpnx diagnose                    # coming in step 4
+ovpnx diagnose                    # health check of the active VPN
+ovpnx diagnose 10.129.1.1         # ...plus a test of one target machine
+ovpnx diagnose 10.129.1.1 --ports 22,80,8080
 ```
+
+### What `diagnose` checks
+
+In order, each failure comes with the probable cause:
+
+1. the session is connected
+2. the tunnel interface exists and is up (`state UNKNOWN` is normal for tunnels;
+   the `UP` and `LOWER_UP` flags are what count)
+3. a VPN IP is assigned
+4. routes were pushed through the tunnel (split or full tunnel is reported;
+   a missing default route is normal for lab platforms)
+5. the VPN gateway answers ping (a warning only, because some networks filter ICMP)
+6. DNS resolves a public name (a warning only; lab machines are reached by IP)
+
+With a target (IP or hostname) it also checks that the route to the target goes
+through the VPN (nothing is sent otherwise), pings it, and probes a few TCP
+ports. A refused port still proves the machine is alive, so a machine that
+filters ICMP is not reported as down. The verdict separates "the VPN gateway
+says host unreachable" (usually: machine not spawned, or wrong VPN server for
+that lab) from "no response at all" (inconclusive: still booting, or filtered).
+
+The exit status is 0 unless a check failed.
 
 Profile names can be abbreviated when unambiguous (`ovpnx connect htb machines`).
 If `default_profile` is set, the profile name can be left out.
@@ -93,8 +117,8 @@ Example output:
 - OpenVPN 3 backend: connect, disconnect, status, clean *(done)*
 - One VPN at a time by default, including sessions started outside ovpnx *(done)*
 - Per-platform compression policy, never applied blindly; failures explain the fix *(done)*
+- Diagnostics: interface, IP, routes, gateway, DNS and per-target reachability *(done)*
 - OpenVPN 2 backend *(planned, step 5)*
-- Post-connect diagnostics: routes, gateway, DNS *(planned, step 4)*
 - Original `.ovpn` files are never modified *(enforced and tested)*
 
 ## Requirements
@@ -118,6 +142,7 @@ display_name = Hack The Box
 profile_dir = ~/vpn-profiles/HTB
 compression = asym        ; none | asym | yes
 default_profile = starting-point
+expected_routes =         ; optional, e.g. 10.129.0.0/16, 10.10.10.0/24
 
 [platform:thm]
 display_name = TryHackMe
@@ -128,6 +153,9 @@ compression = none
 - The part after `platform:` becomes the shortcut prefix (`htb-start`).
 - `compression = none` passes nothing. `asym` accepts compressed data from the
   server but never compresses what you send. `yes` is not recommended.
+- `expected_routes` (optional) lists networks that `ovpnx diagnose` verifies are
+  routed through the VPN. Leave it empty if you are unsure; different servers
+  push different ranges.
 - Quotes around paths are optional. Typos in option names produce warnings.
 - On WSL2 the profile directory may be a Windows path, for example
   `/mnt/c/Users/<you>/Desktop/VPN Profiles/HTB`.
@@ -147,7 +175,7 @@ src/ovpnx/
 ├── state.py          small JSON state, always verified against reality
 ├── runner.py         run a command, optionally echoing output live (login prompts)
 ├── netinfo.py        interface IP lookup via `ip`
-├── diagnostics.py    (step 4) ordered checks with pass/warn/fail plus a hint
+├── diagnostics.py    ordered checks with pass/warn/fail plus a hint, target test
 └── backends/
     ├── __init__.py   backend selection (auto / openvpn3 / openvpn2)
     ├── base.py       Session type, naming, failure hints
@@ -179,8 +207,8 @@ PYTHONPATH=src python3 -m unittest discover -s tests -t .
 
 1. ~~Environment detection, config, profile listing~~
 2. ~~OpenVPN 3 backend (connect, disconnect, status, clean) and state tracking~~
-3. Compression policy: polish after real-world testing
-4. Diagnostics
+3. ~~Compression policy and failure hints~~ (verified with a real HTB connection)
+4. ~~Diagnostics~~
 5. OpenVPN 2 backend
 6. Shortcuts (`install-shortcuts`), install script, docs, testing on WSL2 and native Linux
 

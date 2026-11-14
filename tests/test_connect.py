@@ -92,7 +92,7 @@ class Base(unittest.TestCase):
             "profile_dir = %s\ncompression = %s\ndefault_profile = starting-point\n"
             % (general, self.tmp / "HTB", compression))
 
-    def run_cli(self, backend, *argv, prog="ovpnx", backend_error=None):
+    def run_cli(self, backend, *argv, prog="ovpnx", backend_error=None, extra=()):
         out, err = io.StringIO(), io.StringIO()
         select = mock.Mock(side_effect=backend_error) if backend_error else \
             mock.Mock(return_value=backend)
@@ -102,7 +102,7 @@ class Base(unittest.TestCase):
             mock.patch("ovpnx.cli.detect_environment", return_value=stub_env()),
             mock.patch("ovpnx.cli.netinfo.interface_ipv4", return_value="10.10.16.153"),
             mock.patch("ovpnx.cli.time.sleep"),
-        ]
+        ] + list(extra)
         with contextlib.ExitStack() as stack:
             for p in patches:
                 stack.enter_context(p)

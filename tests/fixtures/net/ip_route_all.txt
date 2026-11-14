@@ -1,0 +1,9 @@
+default via 172.20.224.1 dev eth0 proto kernel
+10.10.8.0/22 via 10.10.16.1 dev tun0
+10.10.16.0/23 dev tun0 proto kernel scope link src 10.10.16.153
+10.10.110.0/24 via 10.10.16.1 dev tun0
+10.13.37.0/24 via 10.10.16.1 dev tun0
+10.13.38.0/24 via 10.10.16.1 dev tun0
+10.129.0.0/16 via 10.10.16.1 dev tun0
+154.57.166.111 via 172.20.224.1 dev eth0
+172.20.224.0/20 dev eth0 proto kernel scope link src 172.20.224.43

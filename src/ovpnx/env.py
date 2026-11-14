@@ -119,6 +119,11 @@ def _find(binary, which, extra_dirs):
     return None
 
 
+def find_binary(binary, which=shutil.which, extra_dirs=EXTRA_BIN_DIRS):
+    """Locate a program on PATH, falling back to the sbin directories."""
+    return _find(binary, which, extra_dirs)
+
+
 def _probe(key, binary, version_args, pattern, run, which, extra_dirs):
     path = _find(binary, which, extra_dirs)
     if not path:

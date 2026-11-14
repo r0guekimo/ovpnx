@@ -83,6 +83,13 @@ class Console:
         if self.color:
             prefix = "\033[%sm%s\033[0m" % (self._COLORS[tag], prefix)
         print("%s %s" % (prefix, clean(message)), file=stream)
+        self._flush(stream)
+
+    @staticmethod
+    def _flush(stream):
+        flush = getattr(stream, "flush", None)
+        if flush:
+            flush()
 
     def ok(self, message):
         self._emit(self.out, "+", message)
@@ -98,6 +105,7 @@ class Console:
 
     def plain(self, message=""):
         print(clean(message), file=self.out)
+        self._flush(self.out)
 
 
 class RedactingFormatter(logging.Formatter):

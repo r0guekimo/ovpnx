@@ -12,6 +12,8 @@ from . import config as cfg
 from . import netinfo
 from .backends import select_backend
 from .backends.base import BackendError, failure_hints, make_config_name, split_config_name
+from .diagnostics import (DEFAULT_PORTS, FAIL, INFO, PASS, WARN, Probe,
+                          check_target, run_diagnostics, summarize)
 from .env import detect_environment, running_in_wsl
 from .log import Console, redact, setup_logging
 from .profiles import ProfileError, find_candidate_dirs, find_profile, scan_platform
@@ -107,21 +109,38 @@ def _backend_version(backend, env):
     return " %s" % info.version if info and info.version else ""
 
 
-def _describe(session, settings, state):
-    """Return (platform display name or None, profile or config name)."""
-    plat_key = profile = None
-    if state and state.get("session_path") == session.path:
-        plat_key, profile = state.get("platform"), state.get("profile")
-    elif session.managed:
+def _identify(session, settings, state):
+    """Return (platform key or None, profile name or config name)."""
+    if state and state.get("session_path") == session.path and state.get("platform"):
+        return state.get("platform"), state.get("profile")
+    if session.managed:
         keys = list(settings.platforms) if settings else []
         split = split_config_name(session.config_name, keys)
         if split:
-            plat_key, profile = split
+            return split
+    return None, session.config_name
+
+
+def _describe(session, settings, state):
+    """Return (platform display name or None, profile or config name)."""
+    plat_key, profile = _identify(session, settings, state)
     if plat_key:
         if settings and plat_key in settings.platforms:
             return settings.platforms[plat_key].display_name, profile
         return plat_key, profile
-    return None, session.config_name
+    return None, profile
+
+
+def _pick_session(sessions, state):
+    """The session to examine: the one in state, else a managed one, else any."""
+    if state:
+        for s in sessions:
+            if s.path == state.get("session_path"):
+                return s
+    for s in sessions:
+        if s.managed:
+            return s
+    return sessions[0]
 
 
 def _wait_for_ip(device, tries=5):
@@ -231,6 +250,8 @@ def cmd_config(args, con):
         con.plain("      profile_dir:     %s" % plat.profile_dir)
         con.plain("      compression:     %s" % plat.compression)
         con.plain("      default_profile: %s" % (plat.default_profile or "-"))
+        if plat.expected_routes:
+            con.plain("      expected_routes: %s" % ", ".join(plat.expected_routes))
     return EXIT_OK
 
 
@@ -492,12 +513,90 @@ def cmd_clean(args, con):
     return EXIT_ERROR if failed else EXIT_OK
 
 
+_PRINTERS = {PASS: "ok", INFO: "info", WARN: "warn", FAIL: "err_"}
+
+
+def _print_checks(con, checks):
+    for check in checks:
+        getattr(con, _PRINTERS[check.level])(check.message)
+        for hint in check.hints:
+            con.plain("      - %s" % hint)
+
+
 def cmd_diagnose(args, con):
-    con.warn("'diagnose' is not implemented yet (roadmap step 4).")
-    return EXIT_TODO
+    settings = _settings_quiet(args)
+    backend, env = _get_backend(settings.backend if settings else "auto", con)
+    if backend is None:
+        return EXIT_ERROR
+    try:
+        sessions = backend.list_sessions()
+    except BackendError as exc:
+        _report(con, exc)
+        return EXIT_ERROR
+    if not sessions:
+        con.err_("No active VPN session, so there is nothing to diagnose.")
+        con.info("Connect first, e.g.: ovpnx connect <platform> <profile>")
+        return EXIT_ERROR
+
+    state = load_state(cfg.state_dir())
+    session = _pick_session(sessions, state)
+    plat_key, profile = _identify(session, settings, state)
+    disp, _ = _describe(session, settings, state)
+    label = "%s / %s" % (disp, profile) if disp else profile
+    if len(sessions) > 1:
+        con.warn("%d sessions are active; checking %s" % (len(sessions), label))
+
+    expected = []
+    if settings and plat_key in settings.platforms:
+        expected = settings.platforms[plat_key].expected_routes
+
+    probe = Probe()
+    checks = run_diagnostics(session, label, probe, expected)
+    _print_checks(con, checks)
+    fails, warns = summarize(checks)
+    device_ok = not any(c.name == "interface" and c.level == FAIL for c in checks)
+
+    con.plain()
+    if fails:
+        con.err_("%d problem%s found with the VPN connection." % (fails, "" if fails == 1 else "s"))
+    elif warns:
+        con.warn("The VPN connection works, with %d warning%s." % (warns, "" if warns == 1 else "s"))
+    else:
+        con.info("The VPN connection looks healthy.")
+
+    if args.target:
+        con.plain()
+        con.info("Target: %s" % args.target)
+        if not device_ok:
+            con.warn("Skipping the target test: the VPN interface is not usable.")
+        else:
+            target_checks = check_target(args.target, session.device, probe,
+                                         args.ports or DEFAULT_PORTS)
+            _print_checks(con, target_checks)
+            fails += summarize(target_checks)[0]
+    else:
+        if args.ports:
+            con.warn("--ports only applies together with a target.")
+        con.info("A working VPN does not guarantee that every machine is reachable. "
+                 "Test one with: ovpnx diagnose <target-ip>")
+
+    if env.is_wsl:
+        con.info("WSL2: only this Linux distribution goes through the VPN; Windows "
+                 "applications and browsers do not.")
+    return EXIT_ERROR if fails else EXIT_OK
 
 
 # ------------------------------------------------------------ parser/main
+def _ports_arg(value):
+    try:
+        ports = [int(p) for p in value.split(",") if p.strip()]
+    except ValueError:
+        raise argparse.ArgumentTypeError("ports must be numbers separated by commas")
+    if not ports or any(not 1 <= p <= 65535 for p in ports) or len(ports) > 32:
+        raise argparse.ArgumentTypeError("give 1-32 ports between 1 and 65535")
+    return ports
+
+
 def build_parser():
     p = argparse.ArgumentParser(
         prog="ovpnx",
@@ -541,7 +640,11 @@ def build_parser():
     s = sub.add_parser("clean", help="remove configs imported by ovpnx that are not in use")
     s.set_defaults(func=cmd_clean)
 
-    s = sub.add_parser("diagnose", help="run connectivity diagnostics (coming soon)")
+    s = sub.add_parser("diagnose", help="check the VPN connection and optionally a target")
+    s.add_argument("target", nargs="?", help="machine IP or hostname to test through the VPN")
+    s.add_argument("--ports", type=_ports_arg, metavar="P1,P2",
+                   help="TCP ports to probe on the target (default: %s)"
+                   % ",".join(str(p) for p in DEFAULT_PORTS))
     s.set_defaults(func=cmd_diagnose)
     return p
 
