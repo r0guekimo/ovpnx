@@ -353,6 +353,32 @@ tests/                unittest, standard library only
 PYTHONPATH=src python3 -m unittest discover -s tests -t .
 ```
 
+## Troubleshooting
+
+**`Compression Error: server pushed compression settings that are not allowed`**
+Some platforms (HTB, for example) push compression settings that OpenVPN 3 rejects by default. Set `compression = asym` for that platform in `~/.config/ovpnx/config.ini`, or re-run `ovpnx setup`. This only allows receive-side compression; your original `.ovpn` file is never modified.
+
+**The VPN is connected but my target is unreachable**
+A working tunnel does not mean the machine is up. Run:
+
+```bash
+ovpnx diagnose <target-ip>
+```
+
+If the gateway reports "host unreachable", the machine is usually not spawned yet or you are on the wrong VPN server. A refused TCP port still proves the host is alive.
+
+**`tun0` shows `state UNKNOWN`**
+This is normal for tun devices. ovpnx treats an interface with the `UP` and `LOWER_UP` flags as healthy.
+
+**TAB completion does nothing**
+Shells only read their rc files at startup. Open a new terminal or run `exec bash` (or `exec zsh`) after installing.
+
+**`ovpnx connect` refuses to start a second VPN**
+By default only one VPN runs at a time. Run `ovpnx status` to see the active session, or `ovpnx disconnect` to end it.
+
+**Profile asks for a login and I'm using OpenVPN 2**
+Profiles with a bare `auth-user-pass` are not supported on the OpenVPN 2 backend yet. Use the OpenVPN 3 backend for these profiles.
+
 ## Roadmap
 
 1. ~~Environment detection, config, profile listing~~
