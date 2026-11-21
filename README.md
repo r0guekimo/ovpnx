@@ -276,6 +276,22 @@ Profiles with a bare `auth-user-pass` line are only supported by OpenVPN 3
 **`htb-start: command not found`**
 Run `ovpnx install-shortcuts`, and make sure `~/.local/bin` is on your `PATH`.
 
+**`tun0` shows `state UNKNOWN`**
+This is normal for tunnel devices. ovpnx treats an interface with the `UP` and
+`LOWER_UP` flags as healthy, so no action is needed.
+
+**TAB completion does nothing**
+A shell only reads its rc file when it starts. Open a new terminal, or run
+`exec bash` (or `exec zsh`) in the current one. If it still fails, check that
+`~/.bashrc` contains the `ovpnx completion` block and that
+`~/.local/share/ovpnx/` has the completion script.
+
+**`ovpnx connect` refuses to start a second VPN**
+Only one VPN runs at a time by default, including tunnels started outside
+ovpnx. Run `ovpnx status` to see what is active, then `ovpnx disconnect`
+(or `ovpnx disconnect --all`). To allow several, set `allow_multiple = true`
+under `[general]`.
+
 **Anything else:** `ovpnx -v <command>` prints debug lines, and
 `~/.local/state/ovpnx/logs/ovpnx.log` keeps a redacted log.
 
@@ -352,32 +368,6 @@ tests/                unittest, standard library only
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -t .
 ```
-
-## Troubleshooting
-
-**`Compression Error: server pushed compression settings that are not allowed`**
-Some platforms (HTB, for example) push compression settings that OpenVPN 3 rejects by default. Set `compression = asym` for that platform in `~/.config/ovpnx/config.ini`, or re-run `ovpnx setup`. This only allows receive-side compression; your original `.ovpn` file is never modified.
-
-**The VPN is connected but my target is unreachable**
-A working tunnel does not mean the machine is up. Run:
-
-```bash
-ovpnx diagnose <target-ip>
-```
-
-If the gateway reports "host unreachable", the machine is usually not spawned yet or you are on the wrong VPN server. A refused TCP port still proves the host is alive.
-
-**`tun0` shows `state UNKNOWN`**
-This is normal for tun devices. ovpnx treats an interface with the `UP` and `LOWER_UP` flags as healthy.
-
-**TAB completion does nothing**
-Shells only read their rc files at startup. Open a new terminal or run `exec bash` (or `exec zsh`) after installing.
-
-**`ovpnx connect` refuses to start a second VPN**
-By default only one VPN runs at a time. Run `ovpnx status` to see the active session, or `ovpnx disconnect` to end it.
-
-**Profile asks for a login and I'm using OpenVPN 2**
-Profiles with a bare `auth-user-pass` are not supported on the OpenVPN 2 backend yet. Use the OpenVPN 3 backend for these profiles.
 
 ## Roadmap
 
